@@ -2,7 +2,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Painel BI - Konica Minolta',
+  title: 'Painel BI',
   description: 'Dashboard corporativo para monitoramento de frotas de impressoras',
 };
 
