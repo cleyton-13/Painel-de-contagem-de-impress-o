@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Unidade {
+  id               String              @id @default(uuid())
+  nome             String              @unique
+  nomeSanitizado   String              @unique
+  emailContato     String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  perfilFranquiaId String?
+  impressoras      Impressora[]
+  leituras         LeituraImpressora[]
+  perfilFranquia   PerfilFranquia?     @relation(fields: [perfilFranquiaId], references: [id])
+  aliases          UnidadeAlias[]
+
+  @@index([nomeSanitizado])
+}
+
+model UnidadeAlias {
+  id        String   @id @default(uuid())
+  alias     String   @unique
+  unidadeId String
+  createdAt DateTime @default(now())
+  unidade   Unidade  @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
+
+  @@index([alias])
+}
+
+model Impressora {
+  id        String   @id @default(uuid())
+  serial    String   @unique
+  modelo    String
+  ip        String
+  apelido   String?
+  unidadeId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  unidade   Unidade  @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
+  leituras  LeituraImpressora[]
+
+  preExistente              Boolean @default(false)
+  leituraReferenciaPB        Int?
+  leituraReferenciaColor     Int?
+  quebraPorTipoIndisponivel  Boolean @default(false)
+
+  @@index([unidadeId])
+  @@index([ip])
+}
+
+model LeituraImpressora {
+  id           String      @id @default(uuid())
+  dataHora     DateTime
+  paginasTotal Int
+  paginasPB    Int
+  paginasColor Int
+  status       String
+  resetPlaca   Boolean     @default(false)
+  ip           String
+  serial       String
+  impressoraId String?
+  unidadeId    String
+  createdAt    DateTime    @default(now())
+  impressora   Impressora? @relation(fields: [impressoraId], references: [id])
+  unidade      Unidade     @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
+
+  @@unique([ip, serial, dataHora])
+  @@index([unidadeId, dataHora])
+  @@index([impressoraId, dataHora])
+  @@index([serial, dataHora])
+}
+
+model PerfilFranquia {
+  id                String    @id @default(uuid())
+  nome              String    @unique
+  tarifaAvulsaPB    Float     @default(0.04)
+  tarifaAvulsaColor Float     @default(0.25)
+  temFranquiaFixa   Boolean   @default(true)
+  valorFixoMensal   Float?    @default(500.0)
+  cotaPB            Int?      @default(5000)
+  cotaColor         Int?      @default(1000)
+  excedentePB       Float?    @default(0.05)
+  excedenteColor    Float?    @default(0.30)
+  precoResmaPapel   Float     @default(28.0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  unidades          Unidade[]
+}
+
+model ConfiguracaoSLA {
+  id                  String   @id @default("default_config")
+  horarioLimite       String   @default("17:00")
+  alertasAtivos       Boolean  @default(true)
+  emailsDestinatarios String   @default("")
+  updatedAt           DateTime @updatedAt
+}
+
+model ArquivoIngerido {
+  id                String   @id @default(uuid())
+  nomeArquivo       String   @unique
+  dataProcessamento DateTime @default(now())
+  tamanhoBytes      BigInt
+  status            String   @default("PROCESSADO")
+  erroMensagem      String?
+  novas             Int      @default(0)
+  atualizadas       Int      @default(0)
+
+  @@index([nomeArquivo])
+}
+
+model ConfiguracaoSistema {
+  id                    String   @id @default("default")
+  csvDirectoryPath      String   @default("")
+  usarSeparacaoCores    Boolean  @default(false)
+  faturamentoHabilitado Boolean  @default(true)
+  tarifaUnica           Float    @default(0)
+  updatedAt             DateTime @updatedAt
+}
+
+model ConfiguracaoIA {
+  id          String   @id @default("default_ia")
+  provedor    String   @default("groq")
+  modelo      String   @default("llama-3.3-70b-versatile")
+  apiKey      String   @default("")
+  endpointUrl String   @default("")
+  temperatura Float    @default(0.7)
+  maxTokens   Int      @default(4096)
+  idioma      String   @default("pt-BR")
+  updatedAt   DateTime @updatedAt
+}

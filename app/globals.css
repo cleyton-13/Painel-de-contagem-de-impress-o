@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ============================================================
+   PALETAS GLOBAIS — Painel BI
+   Como funciona:
+   - `@theme inline` (acima) faz as classes do Tailwind
+     (bg-cyan-500, text-emerald-400, ...) resolverem via
+     `var(--color-*)` em TEMPO DE EXECUÇÃO.
+   - Cada `html[data-palette="..."]` abaixo redefine essas
+     variáveis + as cores dos gráficos. Trocar de paleta =
+     trocar 1 atributo no <html>, sem tocar nos componentes.
+   - `atual` = visual de hoje (sem overrides, baseline).
+   ============================================================ */
+
+/* --- Cores dos gráficos (baseline = visual atual) --- */
+:root {
+  --chart-pb: #3b82f6;
+  --chart-color: #ec4899;
+  --chart-total: #22d3ee;
+  --chart-pb-alt: #06b6d4;
+  --chart-color-alt: #8b5cf6;
+}
+
+/* --- Grid/tooltip dos gráficos por modo (antes eram
+       ternários isDark espalhados nos componentes) --- */
+html.dark {
+  --chart-grid: #334155;
+  --chart-axis: #94a3b8;
+  --chart-tooltip-bg: #0f172a;
+  --chart-tooltip-border: #334155;
+  --chart-tooltip-color: #ffffff;
+}
+html.light {
+  --chart-grid: #e2e8f0;
+  --chart-axis: #475569;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #e2e8f0;
+  --chart-tooltip-color: #1e293b;
+}
+
+/* --- Paleta "petrol": clean, 1 família de destaque (teal),
+       par azul/laranja nos gráficos (seguro p/ daltonismo) --- */
+html[data-palette="petrol"] {
+  --color-cyan-50: #f0fdfa; --color-cyan-100: #ccfbf1; --color-cyan-200: #99f6e4;
+  --color-cyan-300: #5eead4; --color-cyan-400: #2dd4bf; --color-cyan-500: #14b8a6;
+  --color-cyan-600: #0d9488; --color-cyan-700: #0f766e; --color-cyan-800: #115e59;
+  --color-cyan-900: #134e4a; --color-cyan-950: #042f2e;
+  --color-emerald-50: #f0fdfa; --color-emerald-100: #ccfbf1; --color-emerald-200: #99f6e4;
+  --color-emerald-300: #5eead4; --color-emerald-400: #2dd4bf; --color-emerald-500: #14b8a6;
+  --color-emerald-600: #0d9488; --color-emerald-700: #0f766e; --color-emerald-800: #115e59;
+  --color-emerald-900: #134e4a; --color-emerald-950: #042f2e;
+  --color-blue-500: #0284c7; --color-blue-600: #0284c7; --color-blue-400: #38bdf8;
+  --chart-pb: #0284c7;
+  --chart-color: #ea580c;
+  --chart-total: #0d9488;
+  --chart-pb-alt: #0369a1;
+  --chart-color-alt: #c2410c;
+}
+
+/* --- Paleta "champagne": noite executiva, destaque âmbar/ouro --- */
+html[data-palette="champagne"] {
+  --color-cyan-300: #fcd34d; --color-cyan-400: #fbbf24; --color-cyan-500: #f59e0b;
+  --color-cyan-600: #d97706; --color-cyan-700: #b45309;
+  --color-emerald-300: #fcd34d; --color-emerald-400: #fbbf24; --color-emerald-500: #f59e0b;
+  --color-emerald-600: #d97706; --color-emerald-700: #b45309;
+  --color-blue-400: #fbbf24; --color-blue-500: #f59e0b; --color-blue-600: #d97706;
+  --chart-pb: #38bdf8;
+  --chart-color: #fb923c;
+  --chart-total: #fbbf24;
+  --chart-pb-alt: #0284c7;
+  --chart-color-alt: #ea580c;
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+}
+
+@layer utilities {
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes scaleUp {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-scaleUp {
+    animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite linear;
+  }
+
+  /* Glassmorphism panel base — light + dark */
+  .glass-panel {
+    @apply bg-white backdrop-blur-xl border border-slate-200;
+    /* Sombras suaves em camadas (light): blur 4-8px, opacidade 8-12% */
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.04),
+      0 4px 8px rgb(0 0 0 / 0.08),
+      0 8px 24px rgb(0 0 0 / 0.06);
+  }
+}
+
+/* Dark glass-panel override — superfície levemente mais clara
+   que o fundo + borda visível + filete superior p/ relevo */
+html.dark .glass-panel {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.55), rgba(15, 23, 42, 0.72));
+  border-color: rgba(100, 116, 139, 0.35);
+  box-shadow:
+    inset 0 1px 0 0 rgb(148 163 184 / 0.12),
+    0 20px 25px -5px rgb(0 0 0 / 0.35), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+}
+
+/* Texto selecionado legível no escuro */
+html.dark ::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #f8fafc;
+}
+
+/* Dark mode (default) */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Light mode — neutros em camadas (clean) */
+html.light {
+  color-scheme: light;
+  --color-slate-100: #f5f5f5;
+  --color-slate-200: #e5e5e5;
+  --color-slate-300: #d4d4d4;
+  --color-slate-500: #666666;
+}
+
+html.light body {
+  background-color: #fafafa;
+  color: #0f172a;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+
