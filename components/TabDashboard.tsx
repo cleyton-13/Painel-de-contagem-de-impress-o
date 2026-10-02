@@ -137,13 +137,35 @@ export const TabDashboard: React.FC<TabDashboardProps> = ({
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {kpis.unidadesPendentesSLA.map(u => (
-                  <div key={u.id} className="flex items-center space-x-1.5 px-2.5 py-1 bg-white dark:bg-red-950/60 border border-red-200 dark:border-red-800/60 rounded-full text-xs text-red-800 dark:text-red-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
-                    <span className="font-semibold">{u.nome}</span>
-                    <span className="font-normal text-red-400 dark:text-red-400/70">· pendente</span>
-                  </div>
-                ))}
+                {kpis.unidadesPendentesSLA.map(u => {
+                  const ultimaData = u.ultimaLeitura ? new Date(u.ultimaLeitura) : null;
+                  const agora = new Date();
+                  let textoRelativo = 'sem leituras';
+                  let tooltipData = '';
+                  if (ultimaData) {
+                    tooltipData = ultimaData.toLocaleString('pt-BR');
+                    const diffMs = agora.getTime() - ultimaData.getTime();
+                    const diffMin = Math.floor(diffMs / 60000);
+                    const diffH = Math.floor(diffMin / 60);
+                    const diffD = Math.floor(diffH / 24);
+                    if (diffD >= 2) textoRelativo = `há ${diffD} dias`;
+                    else if (diffD === 1) textoRelativo = 'há 1 dia';
+                    else if (diffH >= 1) textoRelativo = `há ${diffH}h`;
+                    else textoRelativo = `há ${diffMin}min`;
+                  }
+                  return (
+                    <div
+                      key={u.id}
+                      title={tooltipData ? `Último envio: ${tooltipData}` : 'Nenhuma leitura registrada'}
+                      className="flex items-center space-x-1.5 px-2.5 py-1 bg-white dark:bg-red-950/60 border border-red-200 dark:border-red-800/60 rounded-full text-xs text-red-800 dark:text-red-200 cursor-default"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                      <span className="font-semibold">{u.nome}</span>
+                      <span className="font-normal text-red-400 dark:text-red-400/70">·</span>
+                      <span className="font-normal text-red-500 dark:text-red-400">{textoRelativo}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
