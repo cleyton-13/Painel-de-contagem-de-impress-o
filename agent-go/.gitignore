@@ -1,0 +1,5 @@
+﻿*.exe
+*.tmp
+*.old
+*.log
+config.json

@@ -13,6 +13,7 @@ import { TabFinanceiro } from '@/components/TabFinanceiro';
 import { TabMonitorEnvios } from '@/components/TabMonitorEnvios';
 import { TabContratos } from '@/components/TabContratos';
 import { TabConfiguracoes } from '@/components/TabConfiguracoes';
+import { LoginModal } from '@/components/LoginModal';
 
 import {
   Unidade, Impressora, PerfilFranquia, ConfiguracaoSistema,
@@ -33,6 +34,14 @@ function errMsg(e: unknown): string {
 function HomeContent() {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('contagem');
+  const [isAuth, setIsAuth] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => setIsAuth(Boolean(d.authenticated)))
+      .catch(() => setIsAuth(false));
+  }, []);
   const [selectedUnidade, setSelectedUnidade] = useState<string>('ALL');
   const [periodo, setPeriodo] = useState<string>('30dias');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -209,6 +218,10 @@ function HomeContent() {
   };
 
   const hasSLAAlert = kpis ? kpis.unidadesPendentesSLA.length > 0 : false;
+
+  if (isAuth === false) {
+    return <LoginModal onSuccess={() => setIsAuth(true)} />;
+  }
 
   return (
     <div className={`min-h-screen font-sans antialiased flex ${theme === 'dark' ? 'bg-slate-950 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(34,211,238,0.07),transparent)] text-slate-100' : 'bg-gray-50 text-gray-900'}`}>
