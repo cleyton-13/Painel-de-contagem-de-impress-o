@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import { LayoutDashboard, Printer, DollarSign, Send, FileText, BarChart3, Settings } from 'lucide-react';
@@ -18,8 +18,6 @@ export const Tabs: React.FC<TabsProps> = ({
   printerCount,
   slaPendingCount
 }) => {
-  const isAfter17 = typeof window !== 'undefined' ? new Date().getHours() >= 17 : false;
-
   const tabsList = [
     {
       id: 'contagem' as TabType,
@@ -52,8 +50,8 @@ export const Tabs: React.FC<TabsProps> = ({
       id: 'dashboard' as TabType,
       label: '6. Visão Geral Executiva',
       icon: LayoutDashboard,
-      badge: slaPendingCount > 0 ? (isAfter17 ? `${slaPendingCount} Atraso SLA` : `${slaPendingCount} Aguardando`) : null,
-      badgeColor: isAfter17 ? 'bg-red-900/80 text-red-300 border-red-700/60' : 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-400/40'
+      badge: slaPendingCount > 0 ? `${slaPendingCount} Pendência` : null,
+      badgeColor: 'bg-red-900/80 text-red-300 border-red-700/60'
     },
     {
       id: 'configuracoes' as TabType,

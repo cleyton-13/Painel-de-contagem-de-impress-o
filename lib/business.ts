@@ -1,4 +1,4 @@
-﻿import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import {
   Unidade,
@@ -1043,4 +1043,3 @@ export async function getContagemDiariaComDias(
 
   return result.sort((a, b) => b.totalDia - a.totalDia);
 }
-

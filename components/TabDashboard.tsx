@@ -1,8 +1,8 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import {
-  FileText, DollarSign, PieChart as PieIcon, Trophy, AlertOctagon, Clock, AlertTriangle,
+  FileText, DollarSign, PieChart as PieIcon, Trophy, AlertOctagon,
   CheckCircle2, XCircle, RotateCcw, TrendingUp, Activity, Eye, EyeOff
 } from 'lucide-react';
 import {
@@ -59,23 +59,6 @@ export const TabDashboard: React.FC<TabDashboardProps> = ({
   });
 
   const [modoFinanceiro, setModoFinanceiro] = useState(false);
-  const [filtroSla, setFiltroSla] = useState<'todos' | 'aguardando' | 'offline'>('todos');
-
-  const agora = new Date();
-  const isAposHorarioLimite = agora.getHours() >= 17;
-
-  const pendentesAguardandoHoje = kpis.unidadesPendentesSLA.filter(
-    (u) => u.tipoPendencia === 'aguardando_hoje' || (u.diasSemLeitura !== undefined && u.diasSemLeitura <= 1)
-  );
-  const pendentesOfflineProlongado = kpis.unidadesPendentesSLA.filter(
-    (u) => u.tipoPendencia === 'offline_prolongado' || (u.diasSemLeitura !== undefined && u.diasSemLeitura > 1) || u.diasSemLeitura === undefined
-  );
-
-  const pendentesExibidos = filtroSla === 'aguardando'
-    ? pendentesAguardandoHoje
-    : filtroSla === 'offline'
-    ? pendentesOfflineProlongado
-    : kpis.unidadesPendentesSLA;
 
   const toggle = (key: keyof ChartVisibility) => {
     setVisibility((v) => ({ ...v, [key]: !v[key] }));
@@ -136,94 +119,29 @@ export const TabDashboard: React.FC<TabDashboardProps> = ({
 
       {/* SLA Alert Banner */}
       {visibility.slaAlerts && kpis.unidadesPendentesSLA.length > 0 && (
-        <div className={`border rounded-2xl p-4 shadow-sm transition-all duration-300 ${
-          isAposHorarioLimite
-            ? 'bg-red-50/80 dark:bg-red-950/35 border-red-200 dark:border-red-800/50 text-red-950 dark:text-red-100'
-            : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-800/40 text-amber-950 dark:text-amber-100'
-        }`}>
+        <div className="bg-red-50/80 dark:bg-red-950/30 border border-red-100 dark:border-red-800/40 rounded-2xl p-4 shadow-sm text-red-900 dark:text-red-100 transition-colors">
           <div className="flex items-start space-x-3">
-            <div className={`p-2.5 rounded-xl shrink-0 ${
-              isAposHorarioLimite
-                ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300'
-                : 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300'
-            }`}>
-              {isAposHorarioLimite ? <AlertOctagon className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+            <div className="p-2 bg-red-100 dark:bg-red-900/50 rounded-xl text-red-500 dark:text-red-300 shrink-0">
+              <AlertOctagon className="w-5 h-5" />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h3 className={`text-sm font-semibold tracking-wide flex items-center gap-2 ${
-                    isAposHorarioLimite ? 'text-red-800 dark:text-red-200' : 'text-amber-900 dark:text-amber-200'
-                  }`}>
-                    {isAposHorarioLimite ? 'Auditoria SLA · Não Conforme (Fora do Prazo)' : 'Ciclo Diário de Coletas · Aguardando Sincronização'}
-                    <span className="font-normal text-xs opacity-75">
-                      ({kpis.unidadesPendentesSLA.length} unidade{kpis.unidadesPendentesSLA.length > 1 ? 's' : ''})
-                    </span>
-                  </h3>
-                  <p className="text-xs mt-0.5 opacity-80">
-                    {isAposHorarioLimite
-                      ? 'Horário limite das 17:00 encerrado. As unidades abaixo não transmitiram dados no ciclo de hoje.'
-                      : 'Janela diária em aberto (disparos programados: manhã, 11:30 e 16:30). Apenas coletas não recebidas após as 17:00 entram em atraso de SLA.'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`px-2.5 py-1 text-xs font-bold rounded-full shadow-sm ${
-                    isAposHorarioLimite
-                      ? 'bg-red-600 dark:bg-red-500 text-white'
-                      : 'bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60'
-                  }`}>
-                    {isAposHorarioLimite ? 'Prazo Esgotado: 17:00' : 'Limite SLA: 17:00'}
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold tracking-wide text-red-800 dark:text-red-200">
+                  Auditoria SLA · Leitura Pendente
+                  <span className="ml-2 font-normal text-red-400 dark:text-red-400/70">
+                    {kpis.unidadesPendentesSLA.length} unidade{kpis.unidadesPendentesSLA.length > 1 ? 's' : ''}
                   </span>
-                </div>
+                </h3>
+                <span className="px-2.5 py-1 text-xs font-bold bg-red-600 dark:bg-red-500 text-white rounded-full shadow-sm shrink-0">
+                  Limite: 17:00
+                </span>
               </div>
-
-              {/* Filtros de visualização */}
-              <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-700/40">
-                <button
-                  type="button"
-                  onClick={() => setFiltroSla('todos')}
-                  className={`px-2 py-0.5 text-xs rounded-lg font-medium transition-all cursor-pointer ${
-                    filtroSla === 'todos'
-                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Todas ({kpis.unidadesPendentesSLA.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroSla('aguardando')}
-                  className={`px-2 py-0.5 text-xs rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1 ${
-                    filtroSla === 'aguardando'
-                      ? 'bg-amber-600 dark:bg-amber-500 text-white shadow-xs'
-                      : 'text-amber-700 dark:text-amber-300 hover:bg-amber-100/60 dark:hover:bg-amber-900/30'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  Aguardando Ciclo Hoje ({pendentesAguardandoHoje.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroSla('offline')}
-                  className={`px-2 py-0.5 text-xs rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1 ${
-                    filtroSla === 'offline'
-                      ? 'bg-rose-600 dark:bg-rose-500 text-white shadow-xs'
-                      : 'text-rose-700 dark:text-rose-300 hover:bg-rose-100/60 dark:hover:bg-rose-900/30'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                  Sem Comunicação &gt; 48h ({pendentesOfflineProlongado.length})
-                </button>
-              </div>
-
-              {/* Lista de pílulas */}
-              <div className="mt-2.5 flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
-                {pendentesExibidos.map((u) => {
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {kpis.unidadesPendentesSLA.map(u => {
                   const ultimaData = u.ultimaLeitura ? new Date(u.ultimaLeitura) : null;
+                  const agora = new Date();
                   let textoRelativo = 'sem leituras';
                   let tooltipData = '';
-                  const ehAguardandoHoje = u.tipoPendencia === 'aguardando_hoje' || (u.diasSemLeitura !== undefined && u.diasSemLeitura <= 1);
-
                   if (ultimaData) {
                     tooltipData = ultimaData.toLocaleString('pt-BR');
                     const diffMs = agora.getTime() - ultimaData.getTime();
@@ -231,35 +149,20 @@ export const TabDashboard: React.FC<TabDashboardProps> = ({
                     const diffH = Math.floor(diffMin / 60);
                     const diffD = Math.floor(diffH / 24);
                     if (diffD >= 2) textoRelativo = `há ${diffD} dias`;
-                    else if (diffD === 1) textoRelativo = 'ontem';
+                    else if (diffD === 1) textoRelativo = 'há 1 dia';
                     else if (diffH >= 1) textoRelativo = `há ${diffH}h`;
                     else textoRelativo = `há ${diffMin}min`;
                   }
-
                   return (
                     <div
                       key={u.id}
-                      title={tooltipData ? `Último envio registrado: ${tooltipData}` : 'Nenhuma leitura registrada'}
-                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs cursor-default border transition-all ${
-                        ehAguardandoHoje
-                          ? 'bg-white dark:bg-slate-900/70 border-amber-200 dark:border-amber-800/60 text-slate-800 dark:text-slate-200'
-                          : 'bg-white dark:bg-red-950/60 border-red-200 dark:border-red-800/60 text-red-900 dark:text-red-200'
-                      }`}
+                      title={tooltipData ? `Último envio: ${tooltipData}` : 'Nenhuma leitura registrada'}
+                      className="flex items-center space-x-1.5 px-2.5 py-1 bg-white dark:bg-red-950/60 border border-red-200 dark:border-red-800/60 rounded-full text-xs text-red-800 dark:text-red-200 cursor-default"
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        ehAguardandoHoje
-                          ? (isAposHorarioLimite ? 'bg-red-500' : 'bg-amber-500')
-                          : 'bg-rose-500'
-                      }`} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
                       <span className="font-semibold">{u.nome}</span>
-                      <span className="opacity-40">·</span>
-                      <span className={`text-[11px] ${
-                        ehAguardandoHoje
-                          ? 'text-slate-500 dark:text-slate-400'
-                          : 'text-rose-600 dark:text-rose-400 font-medium'
-                      }`}>
-                        {ehAguardandoHoje ? `última: ${textoRelativo}` : `offline: ${textoRelativo}`}
-                      </span>
+                      <span className="font-normal text-red-400 dark:text-red-400/70">·</span>
+                      <span className="font-normal text-red-500 dark:text-red-400">{textoRelativo}</span>
                     </div>
                   );
                 })}
@@ -569,5 +472,3 @@ export const TabDashboard: React.FC<TabDashboardProps> = ({
     </div>
   );
 };
-
-
