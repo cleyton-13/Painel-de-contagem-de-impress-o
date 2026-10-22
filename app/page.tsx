@@ -14,6 +14,7 @@ import { TabMonitorEnvios } from '@/components/TabMonitorEnvios';
 import { TabContratos } from '@/components/TabContratos';
 import { TabConfiguracoes } from '@/components/TabConfiguracoes';
 import { LoginModal } from '@/components/LoginModal';
+import { ReportModal } from '@/components/ReportModal';
 
 import {
   Unidade, Impressora, PerfilFranquia, ConfiguracaoSistema,
@@ -48,6 +49,7 @@ function HomeContent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [iaOpen, setIaOpen] = useState<boolean>(false);
+  const [reportsOpen, setReportsOpen] = useState<boolean>(false);
 
   const [viewMode, setViewMode] = useState<'comercial' | 'operacional'>('comercial');
   const [showCosts, setShowCosts] = useState<boolean>(true);
@@ -250,10 +252,12 @@ function HomeContent() {
         hideCurrency={effectiveHideCurrency}
         usarSeparacaoCores={configuracaoSistema?.usarSeparacaoCores ?? false}
         onOpenIA={() => setIaOpen(true)}
+        onOpenReports={() => setReportsOpen(true)}
       />
 
       {/* Modal de Análise de IA */}
       <AIAnalysisModal open={iaOpen} onClose={() => setIaOpen(false)} />
+      <ReportModal isOpen={reportsOpen} onClose={() => setReportsOpen(false)} />
 
       {/* Main Area */}
       <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-56'}`}>

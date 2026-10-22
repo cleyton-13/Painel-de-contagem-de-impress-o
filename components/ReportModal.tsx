@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Download, FileSpreadsheet, Calendar, Building2, CheckCircle2, 
   Clock, DollarSign, Palette, Package, AlertTriangle, FileText, X, ArrowRight
@@ -72,6 +73,7 @@ const REPORT_OPTIONS: ReportOption[] = [
 ];
 
 export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => {
+  const [mounted, setMounted] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string>('sla_conformidade');
   const [periodo, setPeriodo] = useState<string>('30dias');
   const [dataInicio, setDataInicio] = useState<string>('');
@@ -79,6 +81,10 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
   const [selectedUnidade, setSelectedUnidade] = useState<string>('ALL');
   const [unidades, setUnidades] = useState<Array<{ id: string; nome: string }>>([]);
   const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -91,7 +97,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -135,9 +141,12 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100">
+  const modalJSX = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+      <div 
+        className="w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header Modal */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
@@ -338,4 +347,6 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
       </div>
     </div>
   );
+
+  return createPortal(modalJSX, document.body);
 };

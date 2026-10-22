@@ -24,6 +24,7 @@ interface SidebarProps {
   hideCurrency: boolean;
   usarSeparacaoCores?: boolean;
   onOpenIA?: () => void;
+  onOpenReports?: () => void;
 }
 
 const tabsList: Array<{ id: TabType; label: string; shortLabel: string; icon: React.ElementType; badge?: string; badgeColor?: string }> = [
@@ -64,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   hideCurrency,
   usarSeparacaoCores = true,
   onOpenIA,
+  onOpenReports,
 }) => {
   const [reportModalOpen, setReportModalOpen] = React.useState(false);
 
@@ -238,7 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="border-t border-slate-200 dark:border-slate-700 p-2">
         <div className="relative">
           <button
-            onClick={() => setReportModalOpen(true)}
+            onClick={() => onOpenReports && onOpenReports()}
             className={`w-full flex items-center ${collapsed ? 'justify-center' : 'px-3'} py-2.5 text-slate-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer`}
             title={collapsed ? 'Extrair Relatorio' : undefined}
           >
