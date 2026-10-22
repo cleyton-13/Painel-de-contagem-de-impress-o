@@ -1,4 +1,4 @@
-export interface Unidade {
+﻿export interface Unidade {
   id: string;
   nome: string;
   nomeSanitizado: string;
@@ -121,6 +121,8 @@ export interface DashboardKPIs {
     id: string;
     nome: string;
     ultimaLeitura?: string;
+    diasSemLeitura?: number;
+    tipoPendencia?: 'aguardando_hoje' | 'offline_prolongado';
   }>;
 }
 
@@ -261,3 +263,4 @@ export interface MonitorEnviosPayload {
   registros: MonitorEnvioRegistro[];
   atualizadoEm: string;
 }
+

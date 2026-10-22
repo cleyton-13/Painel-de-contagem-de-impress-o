@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React from 'react';
 import {
@@ -287,3 +287,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
+
