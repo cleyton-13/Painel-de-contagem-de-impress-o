@@ -6,6 +6,7 @@ import {
   ChevronLeft, ChevronRight, Printer as PrinterIcon, Download, Sparkles, Settings
 } from 'lucide-react';
 import { TabType } from './Tabs';
+import { ReportModal } from './ReportModal';
 import { DashboardKPIs, ContagemDiariaItem, Impressora, TimelineDataPoint, BranchRankingItem } from '@/lib/types';
 
 interface SidebarProps {
@@ -64,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   usarSeparacaoCores = true,
   onOpenIA,
 }) => {
-  const [reportsOpen, setReportsOpen] = React.useState(false);
+  const [reportModalOpen, setReportModalOpen] = React.useState(false);
 
   const getBadge = (tab: typeof tabsList[0]) => {
     if (tab.id === 'impressoras') return `${printerCount}`;
@@ -237,7 +238,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="border-t border-slate-200 dark:border-slate-700 p-2">
         <div className="relative">
           <button
-            onClick={() => setReportsOpen(!reportsOpen)}
+            onClick={() => setReportModalOpen(true)}
             className={`w-full flex items-center ${collapsed ? 'justify-center' : 'px-3'} py-2.5 text-slate-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all cursor-pointer`}
             title={collapsed ? 'Extrair Relatorio' : undefined}
           >
@@ -247,33 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </button>
 
-            {reportsOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setReportsOpen(false)} />
-              <div className="absolute left-full bottom-0 ml-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden">
-                <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-300 uppercase tracking-wider">Relatorios Pre-definidos</span>
-                </div>
-                <div className="py-1 max-h-80 overflow-y-auto">
-                  {reports.map((report) => (
-                    <button
-                      key={report.id}
-                      onClick={() => { report.generate(); setReportsOpen(false); }}
-                      className="w-full flex items-start space-x-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-all text-left cursor-pointer"
-                    >
-                      <div className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg mt-0.5">
-                        <Download className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-900 dark:text-white">{report.label}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-300 truncate">{report.description}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+            
         </div>
       </div>
 

@@ -4,7 +4,6 @@ import React from 'react';
 import { Calendar, RefreshCw, AlertTriangle, Building2, Sun, Moon } from 'lucide-react';
 import { Unidade } from '@/lib/types';
 import { FinanceToggle } from './FinanceToggle';
-import { ReportExporter } from './ReportExporter';
 import { useTheme, PALETTES, Palette } from './ThemeContext';
 
 interface HeaderProps {
