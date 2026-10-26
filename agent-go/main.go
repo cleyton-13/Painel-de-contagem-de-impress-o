@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sys/windows/svc"
 
 	"spx-agent/config"
+	"spx-agent/gui"
 	"spx-agent/service"
 	"spx-agent/updater"
 )
@@ -25,10 +26,14 @@ func main() {
 		return
 	}
 
-	// Execucao via Console / Linha de Comando (CLI)
+	// Execucao sem argumentos (duplo clique no Windows ou spx-agent digitado no terminal):
+	// Abre diretamente o assistente visual para preenchimento dos dados das impressoras
 	if len(os.Args) < 2 {
-		printBanner()
-		printAjuda()
+		if err := gui.AbrirTela(); err != nil {
+			fmt.Printf("Falha abrindo interface grafica: %v\n", err)
+			printBanner()
+			printAjuda()
+		}
 		return
 	}
 
@@ -92,16 +97,27 @@ func main() {
 			fmt.Printf("Subcomando desconhecido: %s\n", sub)
 		}
 
+	case "gui", "tela":
+		if err := gui.AbrirTela(); err != nil {
+			fmt.Printf("Falha abrindo interface grafica: %v\n", err)
+		}
+
 	case "config":
-		printBanner()
-		cfg, _ := config.LoadConfig()
-		fmt.Printf("Configuracao carregada de %s:\n", config.GetConfigPath())
-		fmt.Printf("  Unidade:          %s\n", cfg.Unidade)
-		fmt.Printf("  Servidor:         %s\n", cfg.ServidorBase)
-		fmt.Printf("  Endpoint:         %s\n", cfg.EndpointIngestao)
-		fmt.Printf("  Impressoras:      %v\n", cfg.Impressoras)
-		fmt.Printf("  Horarios Disparo: %v\n", cfg.HorariosDisparo)
-		fmt.Printf("  Auto-Update:      %v\n", cfg.AutoUpdate)
+		if len(os.Args) > 2 && (os.Args[2] == "--cli" || os.Args[2] == "-c") {
+			printBanner()
+			cfg, _ := config.LoadConfig()
+			fmt.Printf("Configuracao carregada de %s:\n", config.GetConfigPath())
+			fmt.Printf("  Unidade:          %s\n", cfg.Unidade)
+			fmt.Printf("  Servidor:         %s\n", cfg.ServidorBase)
+			fmt.Printf("  Endpoint:         %s\n", cfg.EndpointIngestao)
+			fmt.Printf("  Impressoras:      %v\n", cfg.Impressoras)
+			fmt.Printf("  Horarios Disparo: %v\n", cfg.HorariosDisparo)
+			fmt.Printf("  Auto-Update:      %v\n", cfg.AutoUpdate)
+		} else {
+			if err := gui.AbrirTela(); err != nil {
+				fmt.Printf("Falha abrindo interface grafica: %v\n", err)
+			}
+		}
 
 	case "version", "-v", "--version":
 		fmt.Printf("SPX Agent v%s (Windows 64-bit)\n", Versao)
@@ -120,8 +136,10 @@ func printBanner() {
 
 func printAjuda() {
 	fmt.Println("Comandos disponiveis:")
+	fmt.Println("  spx-agent                  Abre as telas para preencher dados das impressoras (GUI)")
+	fmt.Println("  spx-agent gui              Abre as telas para preencher dados das impressoras (GUI)")
+	fmt.Println("  spx-agent config           Abre as telas de configuracao (use --cli para modo texto)")
 	fmt.Println("  spx-agent run              Executa um ciclo completo de coleta e envio no terminal")
-	fmt.Println("  spx-agent config           Exibe as configuracoes ativas do agente")
 	fmt.Println("  spx-agent update           Verifica e instala atualizacoes do servidor central")
 	fmt.Println("  spx-agent service install  Instala o agente como Windows Service (inicializacao automatica)")
 	fmt.Println("  spx-agent service remove   Remove o Windows Service")

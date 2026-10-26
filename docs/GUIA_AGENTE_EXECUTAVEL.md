@@ -12,11 +12,28 @@ O binario compilado encontra-se em:
 
 ---
 
-## 2. Comandos do Terminal (CLI)
+## 2. Como Usar o Agente
+
+### A. Modo Visual com Telas (GUI - Recomendado)
+Basta dar **dois cliques** no `spx-agent.exe` ou digitar no terminal sem parâmetros:
+```powershell
+.\spx-agent.exe
+```
+O agente abrirá automaticamente uma **interface gráfica completa (Assistente Windows Forms)** para:
+- Digitar o nome da filial/unidade;
+- Preencher a lista de IPs das impressoras (uma por linha);
+- Testar conectividade (Ping) individual ou em todas as impressoras com 1 clique;
+- Configurar o endereço do Servidor Central e a API Key;
+- Executar uma coleta de teste imediata com exibição de log em tempo real;
+- Instalar ou desinstalar o agente como Serviço do Windows sem precisar digitar comandos.
+
+---
+
+## 3. Comandos do Terminal (CLI Avançado)
 
 Abra o prompt de comando (cmd ou PowerShell) na pasta do executavel:
 
-### A. Executar uma coleta de teste no terminal
+### A. Executar uma coleta no terminal
 ```powershell
 .\spx-agent.exe run
 ```

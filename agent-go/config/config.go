@@ -94,6 +94,8 @@ func loadImpressorasTxt(path string) []string {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimPrefix(line, "\ufeff")
+		line = strings.TrimSpace(line)
 		if line != "" && !strings.HasPrefix(line, "#") {
 			ips = append(ips, line)
 		}
