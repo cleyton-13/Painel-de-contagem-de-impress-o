@@ -13,6 +13,8 @@ import { TabFinanceiro } from '@/components/TabFinanceiro';
 import { TabMonitorEnvios } from '@/components/TabMonitorEnvios';
 import { TabContratos } from '@/components/TabContratos';
 import { TabConfiguracoes } from '@/components/TabConfiguracoes';
+import { LoginModal } from '@/components/LoginModal';
+import { ReportModal } from '@/components/ReportModal';
 
 import {
   Unidade, Impressora, PerfilFranquia, ConfiguracaoSistema,
@@ -33,12 +35,21 @@ function errMsg(e: unknown): string {
 function HomeContent() {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('contagem');
+  const [isAuth, setIsAuth] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => setIsAuth(Boolean(d.authenticated)))
+      .catch(() => setIsAuth(false));
+  }, []);
   const [selectedUnidade, setSelectedUnidade] = useState<string>('ALL');
   const [periodo, setPeriodo] = useState<string>('30dias');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [iaOpen, setIaOpen] = useState<boolean>(false);
+  const [reportsOpen, setReportsOpen] = useState<boolean>(false);
 
   const [viewMode, setViewMode] = useState<'comercial' | 'operacional'>('comercial');
   const [showCosts, setShowCosts] = useState<boolean>(true);
@@ -68,51 +79,77 @@ function HomeContent() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const loadData = useCallback(async () => {
+  const loadStaticData = useCallback(async () => {
+    try {
+      const [unidadesData, contratosData, configData] = await Promise.all([
+        jsonFetch<Unidade[]>('/api/unidades'),
+        jsonFetch<PerfilFranquia[]>('/api/contratos'),
+        jsonFetch<ConfiguracaoSistema>('/api/configuracao'),
+      ]);
+      setUnidades(unidadesData);
+      setContratos(contratosData);
+      setConfiguracaoSistema(configData);
+    } catch (e) {
+      console.error('Falha ao carregar dados estáticos:', errMsg(e));
+    }
+  }, []);
+
+  const loadDynamicData = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (selectedUnidade !== 'ALL') params.set('unidadeId', selectedUnidade);
       if (periodo) params.set('periodo', periodo);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
-      
-      const [unidadesData, impressorasData, contratosData, dashData, finData, configData, contagemData, monitorData] = await Promise.all([
-        jsonFetch<Unidade[]>('/api/unidades'),
+
+      const [impressorasData, dashData, finData, contagemData, monitorData] = await Promise.all([
         jsonFetch<Impressora[]>(`/api/impressoras${queryStr}`),
-        jsonFetch<PerfilFranquia[]>('/api/contratos'),
         jsonFetch<{ kpis: DashboardKPIs; timeline: TimelineDataPoint[]; branchRanking: BranchRankingItem[] }>(`/api/dashboard${queryStr}`),
         jsonFetch<FinancialProjection[]>(`/api/financeiro${queryStr}`),
-        jsonFetch<ConfiguracaoSistema>('/api/configuracao'),
         jsonFetch<ContagemDiariaItem[]>(`/api/contagem-diaria${queryStr}`),
         jsonFetch<MonitorEnviosPayload>('/api/monitor'),
       ]);
-      setUnidades(unidadesData);
       setImpressoras(impressorasData);
-      setContratos(contratosData);
       setKpis(dashData.kpis);
       setTimeline(dashData.timeline);
       setBranchRanking(dashData.branchRanking);
       setProjections(finData);
-      setConfiguracaoSistema(configData);
       setContagemDiaria(contagemData);
       setMonitorEnvios(monitorData);
       setDadosCarregados(true);
     } catch (e) {
-      console.error('Falha ao carregar dados:', errMsg(e));
+      console.error('Falha ao carregar dados dinâmicos:', errMsg(e));
     }
   }, [selectedUnidade, periodo]);
+
+  const loadData = useCallback(async () => {
+    await Promise.all([loadStaticData(), loadDynamicData()]);
+  }, [loadStaticData, loadDynamicData]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Auto-refresh em tempo quase real (15s) enquanto dados carregados
+  // Auto-refresh inteligente: pausa em background e atualiza somente quando visível
   useEffect(() => {
     if (!dadosCarregados) return;
     const interval = setInterval(() => {
-      loadData();
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadDynamicData();
+      }
     }, 15000);
-    return () => clearInterval(interval);
-  }, [dadosCarregados, loadData]);
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadDynamicData();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [dadosCarregados, loadDynamicData]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -192,23 +229,12 @@ function HomeContent() {
     } catch (e) { return { success: false, message: `Erro: ${errMsg(e)}` }; }
   };
 
-  const handleUpdateConfigContagem = async (config: { usarSeparacaoCores?: boolean; faturamentoHabilitado?: boolean; tarifaUnica?: number }) => {
-    try {
-      const res = await jsonFetch<{ success: boolean; usarSeparacaoCores: boolean; faturamentoHabilitado: boolean; tarifaUnica: number }>('/api/configuracao', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
-      });
-      if (res.success) {
-        await loadData();
-        showToast('Configuracao de contagem atualizada.');
-      }
-      return {
-        success: res.success,
-        message: res.success ? `OK: separacao de cores ${res.usarSeparacaoCores ? 'ativada' : 'desativada'} (tarifa unica R$ ${res.tarifaUnica.toFixed(2)}).` : 'Erro ao salvar configuracao de contagem.',
-      };
-    } catch (e) { return { success: false, message: `Erro: ${errMsg(e)}` }; }
-  };
 
   const hasSLAAlert = kpis ? kpis.unidadesPendentesSLA.length > 0 : false;
+
+  if (isAuth === false) {
+    return <LoginModal onSuccess={() => setIsAuth(true)} />;
+  }
 
   return (
     <div className={`min-h-screen font-sans antialiased flex ${theme === 'dark' ? 'bg-slate-950 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(34,211,238,0.07),transparent)] text-slate-100' : 'bg-gray-50 text-gray-900'}`}>
@@ -237,10 +263,12 @@ function HomeContent() {
         hideCurrency={effectiveHideCurrency}
         usarSeparacaoCores={configuracaoSistema?.usarSeparacaoCores ?? false}
         onOpenIA={() => setIaOpen(true)}
+        onOpenReports={() => setReportsOpen(true)}
       />
 
       {/* Modal de Análise de IA */}
       <AIAnalysisModal open={iaOpen} onClose={() => setIaOpen(false)} />
+      <ReportModal isOpen={reportsOpen} onClose={() => setReportsOpen(false)} />
 
       {/* Main Area */}
       <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-56'}`}>

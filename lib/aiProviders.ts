@@ -229,8 +229,8 @@ async function callOllama(config: ConfiguracaoIA, messages: ChatMessage[]) {
   return data.message?.content || '';
 }
 
-async function extractErr(res: Response | any): Promise<string> {
-  if (!res || !res.status) {
+async function extractErr(res: Response | unknown): Promise<string> {
+  if (!res || !(res instanceof Response)) {
     // Erros de rede (fetch failed, timeout, ECONNREFUSED)
     const errObj = res as Error;
     const msg = errObj?.message || 'Erro de rede desconhecido';

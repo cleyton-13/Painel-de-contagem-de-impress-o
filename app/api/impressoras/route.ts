@@ -1,18 +1,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getImpressorasView } from '@/lib/business';
+import { getImpressorasView, PeriodoContagem } from '@/lib/business';
+import { isAuthenticated } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const unidadeId = searchParams.get('unidadeId') || undefined;
   const search = searchParams.get('search') || undefined;
-  const periodo = (searchParams.get('periodo') as any) || '30dias';
+  const periodo = (searchParams.get('periodo') as PeriodoContagem) || '30dias';
   const impressoras = await getImpressorasView(prisma, unidadeId, search, periodo);
   return NextResponse.json(impressoras);
 }
 
 export async function PATCH(request: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: 'Nao autorizado. Acesso restrito a administradores.' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { serial, apelido, preExistente, leituraReferenciaPB, leituraReferenciaColor } = body;

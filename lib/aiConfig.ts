@@ -45,7 +45,6 @@ export async function getConfiguracaoIA(): Promise<ConfiguracaoIAType> {
 }
 
 export async function setConfiguracaoIA(data: Partial<ConfiguracaoIAType>) {
-  const current = await getConfiguracaoIA();
   const update: Record<string, unknown> = {};
   if (typeof data.provedor === 'string') update.provedor = data.provedor;
   if (typeof data.modelo === 'string' && data.modelo.trim()) update.modelo = data.modelo.trim();

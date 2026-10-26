@@ -3,7 +3,7 @@ import Papa from 'papaparse';
 import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { sanitizeUnitName, resolveUnit } from '@/lib/business';
+import { resolveUnit } from '@/lib/business';
 import { detectColumnMapping, detectCsvSeparator, type ColumnMapping } from '@/lib/csvColumnMapper';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { z } from 'zod';
@@ -49,7 +49,8 @@ interface RemotingResult {
 function validarApiKey(req: Request): boolean {
   const envKey = process.env.INGESTAO_API_KEY || '';
   if (!envKey) return true; // sem chave configurada => aceita (nao recomendado em producao)
-  return req.headers.get('x-api-key') === envKey;
+  const headerKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  return headerKey === envKey;
 }
 
 function novoResult(): RemotingResult {
@@ -286,8 +287,8 @@ async function processarLinhaCsv(
   const dataStr = String(row[mapping.dataHora] ?? row.DataHora ?? row.dataHora ?? row.Data ?? '').trim();
   const status = String(row[mapping.status] ?? row.Status ?? row.status ?? 'Online').trim();
 
-  let paginasTotal = lerNumerico(row, mapping.paginasTotal, ['Paginas_Total', 'PaginasTotal', 'Total', 'paginasTotal']);
-  let paginasPB = lerNumerico(row, mapping.paginasPB, ['Paginas_PB', 'PaginasPB', 'PB', 'paginasPB']);
+  const paginasTotal = lerNumerico(row, mapping.paginasTotal, ['Paginas_Total', 'PaginasTotal', 'Total', 'paginasTotal']);
+  const paginasPB = lerNumerico(row, mapping.paginasPB, ['Paginas_PB', 'PaginasPB', 'PB', 'paginasPB']);
   let paginasColor = lerNumerico(row, mapping.paginasColor, ['Paginas_Color', 'PaginasColor', 'Color', 'paginasColor']);
 
   const modeloLower = modelo.toLowerCase();

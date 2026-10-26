@@ -41,6 +41,7 @@ export const TabDashboard: React.FC<TabDashboardProps> = ({
 }) => {
   const { theme, palette } = useTheme();
   void palette; // assina o contexto: trocar a paleta re-renderiza e os gráficos releem as vars
+  void showCosts;
   const isDark = theme === 'dark';
 
   // Cores vindas das vars globais (globals.css) — reagem à paleta

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getConfiguracaoSistema, setConfigContagem } from '@/lib/config';
+import { isAuthenticated } from '@/lib/auth';
 
 export async function GET() {
   try {
@@ -17,6 +18,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: 'Nao autorizado. Acesso restrito a administradores.' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
 

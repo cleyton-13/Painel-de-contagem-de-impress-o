@@ -1,0 +1,7 @@
+*.exe
+*.tmp
+*.old
+*.log
+config.json
+impressoras.txt
+/spx_gui.ps1
