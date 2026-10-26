@@ -4,4 +4,4 @@
 *.log
 config.json
 impressoras.txt
-spx_gui.ps1
+/spx_gui.ps1
