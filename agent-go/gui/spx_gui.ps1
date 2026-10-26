@@ -13,7 +13,7 @@ if (-not (Test-Path $baseDir)) { $baseDir = $PSScriptRoot }
 $cfgPath = Join-Path $baseDir "config.json"
 $impPath = Join-Path $baseDir "impressoras.txt"
 
-# Default config object
+# Config default
 $cfg = [PSCustomObject]@{
     unidade = "Matriz"
     servidorBase = "http://localhost:3000"
@@ -46,23 +46,23 @@ if (Test-Path $impPath) {
 $xamlString = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SPX Impressoras BI - Assistente do Agente"
-        Height="730" Width="1040"
-        MinHeight="650" MinWidth="880"
+        Title="SPX Impressoras BI - Assistente de Configuracao"
+        Height="740" Width="1060"
+        MinHeight="660" MinWidth="900"
         WindowStartupLocation="CenterScreen"
-        Background="#080C16"
-        Foreground="#E2E8F0"
-        FontFamily="Segoe UI, Inter, Arial">
+        Background="#F8FAFC"
+        Foreground="#0F172A"
+        FontFamily="Segoe UI, -apple-system, Inter, Arial">
     <Window.Resources>
-        <!-- Modern Rounded Button Style -->
+        <!-- Modern Standard Button (Clean Light) -->
         <Style x:Key="ModernBtn" TargetType="Button">
-            <Setter Property="Background" Value="#1E293B"/>
-            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Padding" Value="16,9"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -77,11 +77,12 @@ $xamlString = @'
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#2D3B55"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#3B82F6"/>
+                                <Setter TargetName="border" Property="Background" Value="#F1F5F9"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#94A3B8"/>
+                                <Setter Property="Foreground" Value="#0F172A"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1E293B"/>
+                                <Setter TargetName="border" Property="Background" Value="#E2E8F0"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="border" Property="Opacity" Value="0.45"/>
@@ -92,10 +93,10 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Primary Action Button (Blue Accent) -->
+        <!-- Primary Button (Vibrant Blue) -->
         <Style x:Key="PrimaryBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
             <Setter Property="Background" Value="#2563EB"/>
-            <Setter Property="BorderBrush" Value="#3B82F6"/>
+            <Setter Property="BorderBrush" Value="#2563EB"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -111,7 +112,8 @@ $xamlString = @'
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#1D4ED8"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#60A5FA"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#1D4ED8"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#1E40AF"/>
@@ -125,10 +127,10 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Success Button (Emerald) -->
+        <!-- Success Button (Emerald Green) -->
         <Style x:Key="SuccessBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
             <Setter Property="Background" Value="#059669"/>
-            <Setter Property="BorderBrush" Value="#10B981"/>
+            <Setter Property="BorderBrush" Value="#059669"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -144,6 +146,11 @@ $xamlString = @'
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#047857"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#047857"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#065F46"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -151,11 +158,11 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Danger Button (Rose Red) -->
+        <!-- Danger Button (Subtle Red Light) -->
         <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
-            <Setter Property="Background" Value="#1E1622"/>
-            <Setter Property="BorderBrush" Value="#881337"/>
-            <Setter Property="Foreground" Value="#FDA4AF"/>
+            <Setter Property="Background" Value="#FEF2F2"/>
+            <Setter Property="BorderBrush" Value="#FECACA"/>
+            <Setter Property="Foreground" Value="#DC2626"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -169,9 +176,12 @@ $xamlString = @'
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#991B1B"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#EF4444"/>
-                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                                <Setter TargetName="border" Property="Background" Value="#FEE2E2"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#FCA5A5"/>
+                                <Setter Property="Foreground" Value="#B91C1C"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FECACA"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -179,12 +189,12 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Modern Input Style -->
+        <!-- Modern Clean TextBox (Light Mode) -->
         <Style x:Key="ModernTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="#111827"/>
-            <Setter Property="Foreground" Value="#F8FAFC"/>
-            <Setter Property="CaretBrush" Value="#38BDF8"/>
-            <Setter Property="BorderBrush" Value="#1F2937"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="CaretBrush" Value="#2563EB"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,8"/>
             <Setter Property="FontSize" Value="13"/>
@@ -200,8 +210,11 @@ $xamlString = @'
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="border" Property="BorderBrush" Value="#3B82F6"/>
-                                <Setter TargetName="border" Property="Background" Value="#0F172A"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#2563EB"/>
+                                <Setter TargetName="border" Property="Background" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#94A3B8"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -209,13 +222,13 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Modern Radio Tab Button Style -->
+        <!-- Modern Light Segmented Tab Radio Button -->
         <Style x:Key="NavTabBtn" TargetType="RadioButton">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="Foreground" Value="#64748B"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="18,10"/>
+            <Setter Property="Padding" Value="20,10"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -224,13 +237,13 @@ $xamlString = @'
                                 Background="{TemplateBinding Background}"
                                 CornerRadius="8"
                                 Padding="{TemplateBinding Padding}"
-                                Margin="0,0,8,0">
+                                Margin="0,0,6,0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="tabBorder" Property="Background" Value="#1E293B"/>
-                                <Setter Property="Foreground" Value="#E2E8F0"/>
+                                <Setter TargetName="tabBorder" Property="Background" Value="#F1F5F9"/>
+                                <Setter Property="Foreground" Value="#0F172A"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="tabBorder" Property="Background" Value="#2563EB"/>
@@ -245,18 +258,18 @@ $xamlString = @'
 
     <Grid>
         <Grid.RowDefinitions>
-            <!-- Header -->
-            <RowDefinition Height="74"/>
-            <!-- Nav Bar -->
-            <RowDefinition Height="52"/>
-            <!-- Content Area -->
+            <!-- Header (White with subtle divider) -->
+            <RowDefinition Height="76"/>
+            <!-- Nav Bar (Subtle light grey bar) -->
+            <RowDefinition Height="56"/>
+            <!-- Content Area (Card on clean background) -->
             <RowDefinition Height="*"/>
-            <!-- Console Area -->
+            <!-- Console Area (Compact developer panel) -->
             <RowDefinition Height="185"/>
         </Grid.RowDefinitions>
 
         <!-- HEADER -->
-        <Border Grid.Row="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="24,0">
+        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="28,0">
             <Grid VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -266,40 +279,41 @@ $xamlString = @'
 
                 <!-- Brand / Logo Area -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Background="#2563EB" CornerRadius="10" Width="40" Height="40" Margin="0,0,14,0">
+                    <Border Background="#2563EB" CornerRadius="10" Width="42" Height="42" Margin="0,0,14,0">
+                        <!-- Clean Vector Printer Icon -->
                         <Path Fill="#FFFFFF" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"
                               Data="M19 8h-1V3H6v5H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zM8 5h8v3H8V5zm8 12v2H8v-4h8v2zm2-2v-2H6v2H4v-4c0-.55.45-1 1-1h14c.55 0 1 .45 1 1v4h-2z"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="SPX Impressoras BI" FontSize="17" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,8,0"/>
-                            <Border Background="#1E293B" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-                                <TextBlock Text="v2.1 Enterprise" FontSize="10" FontWeight="SemiBold" Foreground="#94A3B8"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="SPX Impressoras BI" FontSize="18" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,8,0"/>
+                            <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="7,2" VerticalAlignment="Center">
+                                <TextBlock Text="v2.1 Enterprise" FontSize="11" FontWeight="Bold" Foreground="#1D4ED8"/>
                             </Border>
                         </StackPanel>
-                        <TextBlock Text="Agente Autonomo de Telemetria e Monitoramento SNMP" FontSize="11" Foreground="#64748B"/>
+                        <TextBlock Text="Agente Autonomo de Telemetria e Monitoramento de Parque de Impressao" FontSize="11.5" Foreground="#64748B"/>
                     </StackPanel>
                 </StackPanel>
 
                 <!-- Service Status Pill -->
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border x:Name="pnlServicePill" Background="#132320" BorderBrush="#065F46" BorderThickness="1" CornerRadius="20" Padding="14,6">
+                    <Border x:Name="pnlServicePill" Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="20" Padding="14,6">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse x:Name="dotServiceStatus" Width="8" Height="8" Fill="#10B981" Margin="0,0,8,0"/>
-                            <TextBlock x:Name="lblServiceStatus" Text="SERVICO: VERIFICANDO..." FontSize="11" FontWeight="Bold" Foreground="#34D399"/>
+                            <Ellipse x:Name="dotServiceStatus" Width="9" Height="9" Fill="#10B981" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="lblServiceStatus" Text="SERVICO: VERIFICANDO..." FontSize="11.5" FontWeight="Bold" Foreground="#065F46"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
-                <!-- Main Fast Action -->
+                <!-- Fast Run Button -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="btnFastRun" Content="EXECUTAR COLETA AGORA" Style="{StaticResource PrimaryBtn}" Padding="20,10"/>
+                    <Button x:Name="btnFastRun" Content="Executar Coleta Agora" Style="{StaticResource PrimaryBtn}" Padding="22,11"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- NAV BAR / TABS -->
-        <Border Grid.Row="1" Background="#0C1222" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="24,0">
+        <Border Grid.Row="1" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="28,0">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <RadioButton x:Name="tabBtnImpressoras" Content="Impressoras (IPs)" Style="{StaticResource NavTabBtn}" IsChecked="True"/>
                 <RadioButton x:Name="tabBtnServidor" Content="Servidor e Filial" Style="{StaticResource NavTabBtn}"/>
@@ -307,17 +321,17 @@ $xamlString = @'
             </StackPanel>
         </Border>
 
-        <!-- MAIN CONTENT PANELS (Tabs Swapped via Visibility) -->
-        <Grid Grid.Row="2" Margin="24,18">
+        <!-- MAIN CONTENT PANELS (Clean White Cards on Slate Background) -->
+        <Grid Grid.Row="2" Margin="28,20">
             <!-- TAB 1: IMPRESSORAS -->
             <Grid x:Name="panelImpressoras" Visibility="Visible">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="330"/>
+                    <ColumnDefinition Width="340"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: Big IP Editor Card -->
-                <Border Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="12" Padding="22" Margin="0,0,16,0">
+                <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24" Margin="0,0,18,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -328,46 +342,46 @@ $xamlString = @'
 
                         <DockPanel Grid.Row="0" Margin="0,0,0,6">
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                                <TextBlock Text="Lista de Enderecos IP das Impressoras" FontSize="14" FontWeight="Bold" Foreground="#F8FAFC"/>
+                                <TextBlock Text="Enderecos IP das Impressoras" FontSize="15" FontWeight="Bold" Foreground="#0F172A"/>
                             </StackPanel>
-                            <Border DockPanel.Dock="Right" Background="#1E293B" CornerRadius="6" Padding="8,4">
-                                <TextBlock x:Name="lblIpsCount" Text="0 impressoras cadastradas" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                            <Border DockPanel.Dock="Right" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="10,4">
+                                <TextBlock x:Name="lblIpsCount" Text="0 impressoras cadastradas" FontSize="11.5" FontWeight="Bold" Foreground="#1D4ED8"/>
                             </Border>
                         </DockPanel>
 
-                        <TextBlock Grid.Row="1" Text="Insira um endereco IPv4 por linha ou separados por virgula. Linhas iniciadas com '#' serao ignoradas."
-                                   FontSize="11" Foreground="#64748B" Margin="0,0,0,12"/>
+                        <TextBlock Grid.Row="1" Text="Digite um endereco IP por linha ou separe por virgula. Linhas iniciadas com '#' serao ignoradas."
+                                   FontSize="11.5" Foreground="#64748B" Margin="0,0,0,12"/>
 
                         <!-- Multiline TextBox for IPs -->
                         <TextBox x:Name="txtIpsBox" Grid.Row="2" Style="{StaticResource ModernTextBox}"
-                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas, monospace" FontSize="13"
-                                 TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas, Cascadia Code, monospace" FontSize="13.5"
+                                 TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                         <DockPanel Grid.Row="3">
                             <Button x:Name="btnLimparIps" Content="Limpar Lista" Style="{StaticResource DangerBtn}" DockPanel.Dock="Left"/>
-                            <Button x:Name="btnSalvarImp" Content="Salvar Lista de Impressoras" Style="{StaticResource SuccessBtn}" DockPanel.Dock="Right" Padding="22,9"/>
+                            <Button x:Name="btnSalvarImp" Content="Salvar Impressoras" Style="{StaticResource SuccessBtn}" DockPanel.Dock="Right" Padding="24,10"/>
                         </DockPanel>
                     </Grid>
                 </Border>
 
                 <!-- Right: Quick Diagnostics Card -->
-                <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="12" Padding="22">
+                <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24">
                     <StackPanel>
-                        <TextBlock Text="Diagnostico de Rede Local" FontSize="14" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,6"/>
-                        <TextBlock Text="Teste a comunicacao ICMP (Ping) diretamente da maquina para as impressoras cadastradas."
-                                   FontSize="11" Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,18"/>
+                        <TextBlock Text="Diagnostico de Conectividade" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+                        <TextBlock Text="Valide a comunicacao local (Ping) antes de sincronizar os contadores com o servidor central."
+                                   FontSize="11.5" Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,20"/>
 
                         <Button x:Name="btnPingSel" Content="Testar IP Selecionado / Linha Atual" Style="{StaticResource ModernBtn}"
                                 HorizontalAlignment="Stretch" Margin="0,0,0,12"/>
 
                         <Button x:Name="btnPingAll" Content="Testar Todas as Impressoras" Style="{StaticResource ModernBtn}"
-                                HorizontalAlignment="Stretch" Margin="0,0,0,20"/>
+                                HorizontalAlignment="Stretch" Margin="0,0,0,22"/>
 
-                        <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,12">
+                        <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Padding="16">
                             <StackPanel>
-                                <TextBlock Text="Dica Operacional" FontWeight="Bold" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4"/>
-                                <TextBlock Text="Se o status for OFFLINE, certifique-se de que a impressora esta ligada, com o cabo de rede conectado e no mesmo segmento do agente."
-                                           FontSize="11" Foreground="#64748B" TextWrapping="Wrap"/>
+                                <TextBlock Text="Dica Operacional" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,4"/>
+                                <TextBlock Text="Se alguma impressora constar como sem resposta, verifique se o cabo de rede esta conectado e se a impressora esta ligada na mesma sub-rede."
+                                           FontSize="11.5" Foreground="#64748B" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -382,40 +396,40 @@ $xamlString = @'
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: Conexao Card -->
-                <Border Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="12" Padding="22" Margin="0,0,16,0">
+                <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24" Margin="0,0,18,0">
                     <StackPanel>
-                        <TextBlock Text="Identificacao e Servidor Central" FontSize="14" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,4"/>
-                        <TextBlock Text="Configure a identificacao desta unidade e o endereco do painel central." FontSize="11" Foreground="#64748B" Margin="0,0,0,18"/>
+                        <TextBlock Text="Servidor Central e Identificacao" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+                        <TextBlock Text="Configure para onde o agente deve transmitir as metricas de telemetria." FontSize="11.5" Foreground="#64748B" Margin="0,0,0,20"/>
 
-                        <TextBlock Text="Nome da Unidade / Filial:" FontSize="12" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                        <TextBlock Text="Nome da Unidade / Filial:" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtUnidade" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="URL Base do Servidor Central (BI):" FontSize="12" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                        <TextBlock Text="URL Base do Painel Central (BI):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtSrvBase" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Chave de Autenticacao (API Key):" FontSize="12" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,20"/>
-                        <TextBox x:Name="txtApiKey" Style="{StaticResource ModernTextBox}" Margin="0,0,0,20"/>
+                        <TextBlock Text="Chave de Seguranca (API Key):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
+                        <TextBox x:Name="txtApiKey" Style="{StaticResource ModernTextBox}" Margin="0,0,0,22"/>
 
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="btnTestSrv" Content="Testar Conexao com Servidor" Style="{StaticResource ModernBtn}" Margin="0,0,12,0"/>
-                            <Button x:Name="btnSalvarSrv" Content="Salvar Parametros" Style="{StaticResource SuccessBtn}" Padding="22,9"/>
+                            <Button x:Name="btnSalvarSrv" Content="Salvar Parametros" Style="{StaticResource SuccessBtn}" Padding="24,10"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <!-- Right: SNMP & Disparos Card -->
-                <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="12" Padding="22">
+                <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24">
                     <StackPanel>
-                        <TextBlock Text="Protocolo SNMP e Agendamentos" FontSize="14" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,4"/>
-                        <TextBlock Text="Ajustes de comunicacao MIB e horarios de sincronizacao." FontSize="11" Foreground="#64748B" Margin="0,0,0,18"/>
+                        <TextBlock Text="Parametros de Protocolo SNMP" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+                        <TextBlock Text="Ajustes de comunidade e agendamentos automaticos." FontSize="11.5" Foreground="#64748B" Margin="0,0,0,20"/>
 
-                        <TextBlock Text="Comunidade SNMP (Padrao: public):" FontSize="12" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                        <TextBlock Text="Comunidade SNMP (Padrao: public):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtSnmpComm" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Timeout SNMP em Segundos (Padrao: 2):" FontSize="12" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                        <TextBlock Text="Timeout SNMP em Segundos (Padrao: 2):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtSnmpTimeout" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Horarios de Disparo Automatico (separados por virgula):" FontSize="12" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                        <TextBlock Text="Horarios de Disparo Automatico (separados por virgula):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtHorarios" Style="{StaticResource ModernTextBox}" Margin="0,0,0,20"/>
                     </StackPanel>
                 </Border>
@@ -423,7 +437,7 @@ $xamlString = @'
 
             <!-- TAB 3: SERVICO WINDOWS -->
             <Grid x:Name="panelServico" Visibility="Collapsed">
-                <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="12" Padding="24">
+                <Border Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="28">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -432,31 +446,31 @@ $xamlString = @'
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Text="Gerenciamento do Servico em Segundo Plano (Windows Service)" FontSize="15" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,4"/>
-                        <TextBlock Grid.Row="1" Text="O servico SPXAgentService executa de forma autonoma e silenciosa, inicializando junto ao Windows." FontSize="12" Foreground="#64748B" Margin="0,0,0,22"/>
+                        <TextBlock Grid.Row="0" Text="Gerenciamento do Servico Windows (Background Service)" FontSize="16" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+                        <TextBlock Grid.Row="1" Text="O agente pode ser executado como um Servico Oficial do Windows (SPXAgentService), operando silenciosamente mesmo sem usuario logado." FontSize="12" Foreground="#64748B" Margin="0,0,0,24"/>
 
-                        <Border Grid.Row="2" Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="10" Padding="18" Margin="0,0,0,24">
+                        <Border Grid.Row="2" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Padding="20" Margin="0,0,0,26">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
-                                    <TextBlock Text="Status Atual do Servico:" FontSize="12" Foreground="#94A3B8" Margin="0,0,0,4"/>
-                                    <TextBlock x:Name="lblSvcDetail" Text="SPXAgentService: Nao Instalado" FontSize="16" FontWeight="Bold" Foreground="#F8FAFC"/>
+                                    <TextBlock Text="Status do Servico no Windows:" FontSize="12" Foreground="#64748B" Margin="0,0,0,4"/>
+                                    <TextBlock x:Name="lblSvcDetail" Text="SPXAgentService: Nao Instalado" FontSize="16" FontWeight="Bold" Foreground="#0F172A"/>
                                 </StackPanel>
                                 <Button x:Name="btnRefreshSvc" Content="Atualizar Status" Style="{StaticResource ModernBtn}" DockPanel.Dock="Right" VerticalAlignment="Center"/>
                             </DockPanel>
                         </Border>
 
                         <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Top">
-                            <Button x:Name="btnSvcInstall" Content="Instalar e Iniciar Servico" Style="{StaticResource SuccessBtn}" Padding="22,12" Margin="0,0,12,0"/>
-                            <Button x:Name="btnSvcStop" Content="Parar Servico" Style="{StaticResource ModernBtn}" Padding="18,12" Margin="0,0,12,0"/>
-                            <Button x:Name="btnSvcRemove" Content="Desinstalar Servico" Style="{StaticResource DangerBtn}" Padding="18,12"/>
+                            <Button x:Name="btnSvcInstall" Content="Instalar e Iniciar Servico" Style="{StaticResource SuccessBtn}" Padding="24,12" Margin="0,0,14,0"/>
+                            <Button x:Name="btnSvcStop" Content="Parar Servico" Style="{StaticResource ModernBtn}" Padding="20,12" Margin="0,0,14,0"/>
+                            <Button x:Name="btnSvcRemove" Content="Desinstalar Servico" Style="{StaticResource DangerBtn}" Padding="20,12"/>
                         </StackPanel>
                     </Grid>
                 </Border>
             </Grid>
         </Grid>
 
-        <!-- CONSOLE / TERMINAL (Real-time logs) -->
-        <Border Grid.Row="3" Background="#060911" BorderBrush="#1E293B" BorderThickness="0,1,0,0" Padding="24,12,24,16">
+        <!-- CONSOLE / TERMINAL (Professional Dark Slate Dev Console) -->
+        <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="28,12,28,16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -465,15 +479,16 @@ $xamlString = @'
 
                 <DockPanel Grid.Row="0" Margin="0,0,0,8">
                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                        <TextBlock Text="Console de Operacoes e Eventos" FontSize="11" FontWeight="Bold" Foreground="#64748B"/>
+                        <TextBlock Text="Historico de Execucao e Diagnosticos" FontSize="12" FontWeight="Bold" Foreground="#334155"/>
                     </StackPanel>
-                    <Button x:Name="btnLimparConsole" Content="Limpar Console" Style="{StaticResource ModernBtn}" DockPanel.Dock="Right" Padding="10,4" FontSize="11"/>
+                    <Button x:Name="btnLimparConsole" Content="Limpar Historico" Style="{StaticResource ModernBtn}" DockPanel.Dock="Right" Padding="12,5" FontSize="11"/>
                 </DockPanel>
 
-                <Border Grid.Row="1" Background="#030712" BorderBrush="#111827" BorderThickness="1" CornerRadius="8">
+                <!-- High-contrast developer console -->
+                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8">
                     <TextBox x:Name="txtConsole" Background="Transparent" Foreground="#38BDF8" BorderThickness="0"
                              FontFamily="Consolas, Cascadia Code, monospace" FontSize="11.5"
-                             IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Padding="12,8"/>
+                             IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Padding="14,10"/>
                 </Border>
             </Grid>
         </Border>
@@ -545,9 +560,9 @@ function AtualizarContadorIps {
     $linhas = $txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
     $c = $linhas.Count
     if ($c -eq 1) {
-        $lblIpsCount.Text = "1 impressora configurada"
+        $lblIpsCount.Text = "1 impressora cadastrada"
     } else {
-        $lblIpsCount.Text = "$c impressoras configuradas"
+        $lblIpsCount.Text = "$c impressoras cadastradas"
     }
 }
 AtualizarContadorIps
@@ -578,28 +593,28 @@ function AtualizarStatusServico {
     $svc = Get-Service -Name "SPXAgentService" -ErrorAction SilentlyContinue
     if ($null -eq $svc) {
         $lblServiceStatus.Text = "SERVICO: NAO INSTALADO"
-        $lblServiceStatus.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#94A3B8")
-        $dotServiceStatus.Fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#64748B")
-        $pnlServicePill.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#1E293B")
-        $pnlServicePill.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#334155")
+        $lblServiceStatus.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#475569")
+        $dotServiceStatus.Fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#94A3B8")
+        $pnlServicePill.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#F1F5F9")
+        $pnlServicePill.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#CBD5E1")
         $lblSvcDetail.Text = "SPXAgentService: Nao Instalado neste computador"
-        $lblSvcDetail.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#94A3B8")
+        $lblSvcDetail.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#64748B")
     } elseif ($svc.Status -eq "Running") {
         $lblServiceStatus.Text = "SERVICO: EM EXECUCAO"
-        $lblServiceStatus.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#34D399")
+        $lblServiceStatus.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#065F46")
         $dotServiceStatus.Fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#10B981")
-        $pnlServicePill.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#064E3B")
-        $pnlServicePill.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#059669")
+        $pnlServicePill.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#ECFDF5")
+        $pnlServicePill.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#A7F3D0")
         $lblSvcDetail.Text = "SPXAgentService: Em Execucao Automatica (Ativo)"
-        $lblSvcDetail.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#34D399")
+        $lblSvcDetail.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#059669")
     } else {
         $lblServiceStatus.Text = "SERVICO: PARADO"
-        $lblServiceStatus.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#FBBF24")
+        $lblServiceStatus.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#92400E")
         $dotServiceStatus.Fill = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#F59E0B")
-        $pnlServicePill.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#451A03")
-        $pnlServicePill.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#B45309")
+        $pnlServicePill.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#FEF3C7")
+        $pnlServicePill.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#FDE68A")
         $lblSvcDetail.Text = "SPXAgentService: Parado"
-        $lblSvcDetail.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#FBBF24")
+        $lblSvcDetail.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#D97706")
     }
 }
 
@@ -623,7 +638,7 @@ function SalvarTudo([bool]$notificar = $true) {
 
     $u = [string]$cfg.unidade
     $c = $ips.Count
-    Log-Msg "Configuracoes gravadas com sucesso: Unidade '$u', $c impressora(s)." "SUCESSO"
+    Log-Msg "Configuracoes salvas: Unidade '$u' com $c impressora(s)." "SUCESSO"
     if ($notificar) {
         [System.Windows.MessageBox]::Show("Configuracoes e lista de impressoras salvas com sucesso!", "Salvo com Sucesso", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
     }
@@ -715,7 +730,7 @@ $btnFastRun.Add_Click({
     }
 
     $btnFastRun.IsEnabled = $false
-    $btnFastRun.Content = "COLETANDO CONTADORES..."
+    $btnFastRun.Content = "Coletando Contadores..."
 
     $tempOut = Join-Path $baseDir "exec_temp.log"
     $tempErr = Join-Path $baseDir "exec_err.log"
@@ -735,7 +750,7 @@ $btnFastRun.Add_Click({
     }
 
     $btnFastRun.IsEnabled = $true
-    $btnFastRun.Content = "EXECUTAR COLETA AGORA"
+    $btnFastRun.Content = "Executar Coleta Agora"
     Log-Msg "Ciclo de coleta finalizado com codigo de saida: " + $proc.ExitCode "SUCESSO"
 })
 
@@ -773,7 +788,7 @@ $btnSvcRemove.Add_Click({
 })
 
 # Inicializacao
-Log-Msg "Assistente Moderno SPX Impressoras iniciado com sucesso." "INFO"
+Log-Msg "Assistente SPX Impressoras iniciado em Modo Claro." "INFO"
 $uStr = [string]$cfg.unidade
 $sStr = [string]$cfg.servidorBase
 Log-Msg "Filial ativa: $uStr | Servidor: $sStr" "INFO"
