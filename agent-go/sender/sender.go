@@ -1,4 +1,4 @@
-﻿package sender
+package sender
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 	"math"
 	"net/http"
 	"time"
-
 	"spx-agent/collector"
 	"spx-agent/config"
 )
@@ -48,10 +47,11 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 	url := fmt.Sprintf("%s%s", cfg.ServidorBase, cfg.EndpointIngestao)
 	log.Printf("[SENDER] Enviando %d leituras para %s (Unidade: %s)...", len(leituras), url, cfg.Unidade)
 
-	// Cliente HTTP tolerante com timeout de 30s e suporte a HTTPS
+	// Cliente HTTP tolerante com timeout de 30s, suporte a HTTPS e Proxy corporativo
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
+			Proxy:           http.ProxyFromEnvironment,
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
@@ -68,6 +68,7 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 		if cfg.ApiKey != "" {
 			req.Header.Set("x-api-key", cfg.ApiKey)
+			req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 		}
 
 		resp, err := client.Do(req)

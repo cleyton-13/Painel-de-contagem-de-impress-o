@@ -1,4 +1,4 @@
-﻿# Guia de Operacao do Agente Executavel (spx-agent.exe)
+# Guia de Operacao do Agente Executavel (spx-agent.exe)
 
 O `spx-agent.exe` e o novo coletor de contadores em codigo de maquina (Go), compilado sem dependencias externas, consumindo menos de 10 MB de RAM e capaz de rodar como Servico do Windows com auto-atualizacao nativa.
 
@@ -80,8 +80,9 @@ Se `config.json` nao existir, o executavel cria um arquivo padrao automaticament
   "snmpTimeoutSec": 2,
   "horariosDisparo": [
     "08:00",
-    "11:30",
-    "16:30"
+    "12:00",
+    "16:00",
+    "20:00"
   ],
   "autoUpdate": true
 }

@@ -4,8 +4,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { Table, BarChart3, LayoutGrid, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightIcon, Loader2 } from 'lucide-react';
-import { ContagemDiariaItem, ContagemDiariaAgrupada, ContagemDiariaDiaItem, MonitorEnviosPayload } from '@/lib/types';
+import { Table, BarChart3, LayoutGrid, ChevronDown, ChevronRight as ChevronRightIcon, Loader2 } from 'lucide-react';
+import { ContagemDiariaItem, ContagemDiariaAgrupada, MonitorEnviosPayload } from '@/lib/types';
 import { useTheme } from './ThemeContext';
 import { chartTheme } from '@/lib/chartTheme';
 
@@ -103,11 +103,7 @@ export const TabContagemDiaria: React.FC<TabContagemDiariaProps> = ({
 
   // Busca dados diários quando expande uma unidade
   useEffect(() => {
-    if (!expandedUnit) {
-      setDiasData([]);
-      return;
-    }
-    setLoadingDias(true);
+    if (!expandedUnit) return;
     const unit = perUnitData.find((u) => u.unidade === expandedUnit);
     if (!unit) { setLoadingDias(false); return; }
     const unidadeParam = unidadeId && unidadeId !== 'ALL' ? `&unidadeId=${encodeURIComponent(unidadeId)}` : '';
@@ -116,10 +112,14 @@ export const TabContagemDiaria: React.FC<TabContagemDiariaProps> = ({
       .then((all: ContagemDiariaAgrupada[]) => {
         const filtered = all.filter((d) => d.unidadeNome === expandedUnit);
         setDiasData(filtered);
-        setLoadingDias(false);
       })
-      .catch(() => setLoadingDias(false));
-  }, [expandedUnit, periodo, perUnitData]);
+      .catch((err) => {
+        console.error('Falha ao buscar dias da unidade:', err);
+      })
+      .finally(() => {
+        setLoadingDias(false);
+      });
+  }, [expandedUnit, periodo, perUnitData, unidadeId]);
 
   return (
     <div className="space-y-6">
@@ -204,7 +204,15 @@ export const TabContagemDiaria: React.FC<TabContagemDiariaProps> = ({
                   return (
                     <React.Fragment key={`unit-${item.unidadeNome}-${idx}`}>
                       <tr
-                        onClick={() => setExpandedUnit(isExpanded ? null : item.unidadeNome)}
+                        onClick={() => {
+                          if (isExpanded) {
+                            setExpandedUnit(null);
+                            setDiasData([]);
+                          } else {
+                            setLoadingDias(true);
+                            setExpandedUnit(item.unidadeNome);
+                          }
+                        }}
                         className="border-b border-slate-200 dark:border-slate-700 even:bg-slate-50 dark:even:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
                       >
                         <td className="px-2 py-2.5 text-slate-400 dark:text-slate-400">

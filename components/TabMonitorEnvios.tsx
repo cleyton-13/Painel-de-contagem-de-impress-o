@@ -47,10 +47,23 @@ export const TabMonitorEnvios: React.FC<TabMonitorEnviosProps> = ({ initialData,
   }, []);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 15000); // auto-refresh 15s
+    if (initialData) {
+      setData(initialData);
+      setLastUpdate(initialData.atualizadoEm);
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    if (!initialData) {
+      load();
+    }
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        load();
+      }
+    }, 15000);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [initialData, load]);
 
   const unidadesPendentes = data?.unidades.filter((u) => u.pendenteHoje) || [];
   const registros = data?.registros || [];

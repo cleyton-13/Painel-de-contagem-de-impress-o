@@ -1,4 +1,4 @@
-﻿package config
+package config
 
 import (
 	"bufio"
@@ -29,7 +29,7 @@ func DefaultConfig() *Config {
 		Impressoras:      []string{"127.0.0.1"},
 		SNMPCommunity:    "public",
 		SNMPTimeoutSec:   2,
-		HorariosDisparo:  []string{"08:00", "11:30", "16:30"},
+		HorariosDisparo:  []string{"08:00", "12:00", "16:00", "20:00"},
 		AutoUpdate:       true,
 	}
 }

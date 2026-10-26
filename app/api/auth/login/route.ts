@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createSessionToken, validateAdminPassword, COOKIE_NAME } from '@/lib/auth';
 
 export const runtime = 'nodejs';
@@ -31,7 +31,8 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || 'Erro no login' }, { status: 500 });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro no login';
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

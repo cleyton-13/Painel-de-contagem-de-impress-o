@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { isAuthenticated } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
 export async function GET() {
@@ -12,6 +13,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: 'Nao autorizado. Acesso restrito a administradores.' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const {

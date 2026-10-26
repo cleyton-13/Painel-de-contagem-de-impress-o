@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Settings, Save, Trash2, Mail, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const TabConfiguracoes: React.FC = () => {
@@ -25,7 +25,7 @@ export const TabConfiguracoes: React.FC = () => {
       } else {
         setCleanResult({ success: false, msg: data.error || 'Erro desconhecido.' });
       }
-    } catch (err) {
+    } catch {
       setCleanResult({ success: false, msg: 'Falha na comunicação com o servidor.' });
     } finally {
       setIsCleaning(false);
@@ -166,7 +166,7 @@ export const TabConfiguracoes: React.FC = () => {
                   });
                   if (res.ok) alert('Configuração de IA salva com sucesso!');
                   else alert('Erro ao salvar configuração.');
-                } catch (e) {
+                } catch {
                   alert('Erro de comunicação.');
                 }
               }}

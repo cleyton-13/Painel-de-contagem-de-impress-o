@@ -1,4 +1,5 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -76,7 +77,7 @@ export async function GET(req: Request) {
   });
 
   // Busca leituras no periodo
-  const whereLeituras: any = {
+  const whereLeituras: Prisma.LeituraImpressoraWhereInput = {
     dataHora: {
       gte: inicio,
       lte: fim,
@@ -97,7 +98,7 @@ export async function GET(req: Request) {
 
   let filename = `relatorio_${tipo}_${periodo}.csv`;
   let headers: string[] = [];
-  let rows: string[][] = [];
+  const rows: string[][] = [];
 
   switch (tipo) {
     case 'sla_conformidade': {

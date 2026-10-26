@@ -29,15 +29,23 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>('dark');
-  const [palette, setPalette] = useState<Palette>('atual');
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme') as Theme | null;
+      if (saved === 'dark' || saved === 'light') return saved;
+    }
+    return 'dark';
+  });
 
-  useEffect(() => {
-    const saved = localStorage.getItem('theme') as Theme | null;
-    if (saved) setTheme(saved);
-    const savedPalette = localStorage.getItem('palette') as Palette | null;
-    if (savedPalette) setPalette(savedPalette);
-  }, []);
+  const [palette, setPalette] = useState<Palette>(() => {
+    if (typeof window !== 'undefined') {
+      const savedPalette = localStorage.getItem('palette') as Palette | null;
+      if (savedPalette && (savedPalette === 'atual' || savedPalette === 'petrol' || savedPalette === 'champagne')) {
+        return savedPalette;
+      }
+    }
+    return 'atual';
+  });
 
   useEffect(() => {
     localStorage.setItem('theme', theme);

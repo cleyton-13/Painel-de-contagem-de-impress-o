@@ -79,51 +79,77 @@ function HomeContent() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const loadData = useCallback(async () => {
+  const loadStaticData = useCallback(async () => {
+    try {
+      const [unidadesData, contratosData, configData] = await Promise.all([
+        jsonFetch<Unidade[]>('/api/unidades'),
+        jsonFetch<PerfilFranquia[]>('/api/contratos'),
+        jsonFetch<ConfiguracaoSistema>('/api/configuracao'),
+      ]);
+      setUnidades(unidadesData);
+      setContratos(contratosData);
+      setConfiguracaoSistema(configData);
+    } catch (e) {
+      console.error('Falha ao carregar dados estáticos:', errMsg(e));
+    }
+  }, []);
+
+  const loadDynamicData = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (selectedUnidade !== 'ALL') params.set('unidadeId', selectedUnidade);
       if (periodo) params.set('periodo', periodo);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
-      
-      const [unidadesData, impressorasData, contratosData, dashData, finData, configData, contagemData, monitorData] = await Promise.all([
-        jsonFetch<Unidade[]>('/api/unidades'),
+
+      const [impressorasData, dashData, finData, contagemData, monitorData] = await Promise.all([
         jsonFetch<Impressora[]>(`/api/impressoras${queryStr}`),
-        jsonFetch<PerfilFranquia[]>('/api/contratos'),
         jsonFetch<{ kpis: DashboardKPIs; timeline: TimelineDataPoint[]; branchRanking: BranchRankingItem[] }>(`/api/dashboard${queryStr}`),
         jsonFetch<FinancialProjection[]>(`/api/financeiro${queryStr}`),
-        jsonFetch<ConfiguracaoSistema>('/api/configuracao'),
         jsonFetch<ContagemDiariaItem[]>(`/api/contagem-diaria${queryStr}`),
         jsonFetch<MonitorEnviosPayload>('/api/monitor'),
       ]);
-      setUnidades(unidadesData);
       setImpressoras(impressorasData);
-      setContratos(contratosData);
       setKpis(dashData.kpis);
       setTimeline(dashData.timeline);
       setBranchRanking(dashData.branchRanking);
       setProjections(finData);
-      setConfiguracaoSistema(configData);
       setContagemDiaria(contagemData);
       setMonitorEnvios(monitorData);
       setDadosCarregados(true);
     } catch (e) {
-      console.error('Falha ao carregar dados:', errMsg(e));
+      console.error('Falha ao carregar dados dinâmicos:', errMsg(e));
     }
   }, [selectedUnidade, periodo]);
+
+  const loadData = useCallback(async () => {
+    await Promise.all([loadStaticData(), loadDynamicData()]);
+  }, [loadStaticData, loadDynamicData]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Auto-refresh em tempo quase real (15s) enquanto dados carregados
+  // Auto-refresh inteligente: pausa em background e atualiza somente quando visível
   useEffect(() => {
     if (!dadosCarregados) return;
     const interval = setInterval(() => {
-      loadData();
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadDynamicData();
+      }
     }, 15000);
-    return () => clearInterval(interval);
-  }, [dadosCarregados, loadData]);
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadDynamicData();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [dadosCarregados, loadDynamicData]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -203,21 +229,6 @@ function HomeContent() {
     } catch (e) { return { success: false, message: `Erro: ${errMsg(e)}` }; }
   };
 
-  const handleUpdateConfigContagem = async (config: { usarSeparacaoCores?: boolean; faturamentoHabilitado?: boolean; tarifaUnica?: number }) => {
-    try {
-      const res = await jsonFetch<{ success: boolean; usarSeparacaoCores: boolean; faturamentoHabilitado: boolean; tarifaUnica: number }>('/api/configuracao', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
-      });
-      if (res.success) {
-        await loadData();
-        showToast('Configuracao de contagem atualizada.');
-      }
-      return {
-        success: res.success,
-        message: res.success ? `OK: separacao de cores ${res.usarSeparacaoCores ? 'ativada' : 'desativada'} (tarifa unica R$ ${res.tarifaUnica.toFixed(2)}).` : 'Erro ao salvar configuracao de contagem.',
-      };
-    } catch (e) { return { success: false, message: `Erro: ${errMsg(e)}` }; }
-  };
 
   const hasSLAAlert = kpis ? kpis.unidadesPendentesSLA.length > 0 : false;
 

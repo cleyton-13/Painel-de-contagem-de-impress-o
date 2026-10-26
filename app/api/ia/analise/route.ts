@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
 import { prisma } from '@/lib/prisma';
 import { getConfiguracaoIA, iaConfigurado } from '@/lib/aiConfig';
 import { chamarIA } from '@/lib/aiProviders';
@@ -125,7 +126,7 @@ export async function POST() {
     return NextResponse.json({ ...resposta, contexto: { unidades: context.contagemPorUnidade.length, impressoras: context.resumoImpressoras.length } });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    require('fs').appendFileSync('log_ia.txt', new Date().toISOString() + ' - ERRO IA: ' + msg + '\n');
+    fs.appendFileSync('log_ia.txt', new Date().toISOString() + ' - ERRO IA: ' + msg + '\n');
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

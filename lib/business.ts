@@ -121,12 +121,36 @@ export async function getImpressorasView(prisma: PrismaClient, unidadeId?: strin
 
   const result: Impressora[] = [];
 
+  type RawReadingRow = {
+    id: string;
+    serial: string;
+    unidadeId: string;
+    paginasTotal: number | bigint;
+    paginasPB: number | bigint;
+    paginasColor: number | bigint;
+    status: string;
+    dataHora: Date | string;
+    rn?: number;
+    rn_asc?: number;
+    rn_desc?: number;
+    is_baseline?: number;
+  };
+
+  type ReadingMapped = {
+    id: string;
+    paginasTotal: number;
+    paginasPB: number;
+    paginasColor: number;
+    status: string;
+    dataHora: Date;
+  };
+
   const serials = impressoras.map(i => i.serial);
-  const firstMap = new Map<string, any>();
-  const lastMap = new Map<string, any>();
+  const firstMap = new Map<string, ReadingMapped>();
+  const lastMap = new Map<string, ReadingMapped>();
 
   if (serials.length > 0) {
-    const readings = await prisma.$queryRaw<any[]>`
+    const readings = await prisma.$queryRaw<RawReadingRow[]>`
       WITH LastBefore AS (
         SELECT id, serial, "unidadeId", "paginasTotal", "paginasPB", "paginasColor", status, "dataHora",
                ROW_NUMBER() OVER(PARTITION BY serial, "unidadeId" ORDER BY "dataHora" DESC) as rn,
