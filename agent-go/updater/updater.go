@@ -32,10 +32,16 @@ func VerificarEAtualizar(cfg *config.Config) (bool, error) {
 		return false, nil
 	}
 
-	urlVersao := fmt.Sprintf("%s/api/agente/versao", cfg.ServidorBase)
+	base := strings.TrimRight(strings.TrimSpace(cfg.ServidorBase), "/")
+	if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+		base = "http://" + base
+	}
+
+	urlVersao := fmt.Sprintf("%s/api/agente/versao", base)
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
+			Proxy:           http.ProxyFromEnvironment,
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
@@ -77,7 +83,7 @@ func VerificarEAtualizar(cfg *config.Config) (bool, error) {
 	log.Printf("[UPDATER] Nova versao detectada! Local=%s Remota=%s", currentHash[:8], infoExe.Sha256[:8])
 
 	// 1. Download para arquivo temporario
-	urlDownload := fmt.Sprintf("%s/api/agente/download?arquivo=spx-agent.exe", cfg.ServidorBase)
+	urlDownload := fmt.Sprintf("%s/api/agente/download?arquivo=spx-agent.exe", base)
 	tmpExe := currentExe + ".tmp"
 	oldExe := currentExe + ".old"
 

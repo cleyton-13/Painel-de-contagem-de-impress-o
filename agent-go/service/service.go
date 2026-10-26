@@ -97,6 +97,10 @@ func ExecutarCicloCompleto(cfg *config.Config) {
 	}
 
 	// 2. Coleta SNMP Paralela
+	if len(cfg.Impressoras) == 0 {
+		log.Println("[CYCLE] Nenhuma impressora cadastrada para coletar. Use a interface grafica para adicionar os IPs.")
+		return
+	}
 	leituras := collector.ColetaParalela(cfg)
 
 	// 3. Envio HTTP
@@ -239,9 +243,19 @@ func IsWindowsService() bool {
 
 func SetupLogger() {
 	if exe, err := os.Executable(); err == nil {
-		logPath := filepath.Join(filepath.Dir(exe), "spx-agent.log")
+		logDir := filepath.Dir(exe)
+		logPath := filepath.Join(logDir, "spx-agent.log")
+
+		// Rotaciona o log se ultrapassar 5 MB para manter operacao leve e segura
+		if fi, err := os.Stat(logPath); err == nil && fi.Size() > 5*1024*1024 {
+			oldLog := filepath.Join(logDir, "spx-agent.old.log")
+			_ = os.Remove(oldLog)
+			_ = os.Rename(logPath, oldLog)
+		}
+
 		if f, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err == nil {
 			log.SetOutput(f)
+			log.SetFlags(log.Ldate | log.Ltime)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 	"spx-agent/collector"
 	"spx-agent/config"
@@ -44,7 +45,21 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 		return fmt.Errorf("erro serializando JSON: %w", err)
 	}
 
-	url := fmt.Sprintf("%s%s", cfg.ServidorBase, cfg.EndpointIngestao)
+	base := strings.TrimRight(strings.TrimSpace(cfg.ServidorBase), "/")
+	if base == "" {
+		base = "http://localhost:3001"
+	}
+	if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+		base = "http://" + base
+	}
+	endpoint := strings.TrimSpace(cfg.EndpointIngestao)
+	if endpoint == "" {
+		endpoint = "/api/ingestao/direto"
+	}
+	if !strings.HasPrefix(endpoint, "/") {
+		endpoint = "/" + endpoint
+	}
+	url := fmt.Sprintf("%s%s", base, endpoint)
 	log.Printf("[SENDER] Enviando %d leituras para %s (Unidade: %s)...", len(leituras), url, cfg.Unidade)
 
 	// Cliente HTTP tolerante com timeout de 30s, suporte a HTTPS e Proxy corporativo

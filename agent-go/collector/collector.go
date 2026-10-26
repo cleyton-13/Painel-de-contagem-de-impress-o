@@ -1,4 +1,4 @@
-﻿package collector
+package collector
 
 import (
 	"fmt"
@@ -92,7 +92,11 @@ func consultarImpressora(ip string, cfg *config.Config) Leitura {
 			DataHora: dataHora, Status: "Offline",
 		}
 	}
-	defer snmp.Conn.Close()
+	defer func() {
+		if snmp.Conn != nil {
+			_ = snmp.Conn.Close()
+		}
+	}()
 
 	oids := []string{
 		OIDModelo, OIDSerial, OIDPaginasTotal,
@@ -155,6 +159,15 @@ func consultarImpressora(ip string, cfg *config.Config) Leitura {
 		color = 0
 	}
 
+	// Fallback inteligente para totalizacao
+	if total == 0 && (pb > 0 || color > 0) {
+		total = pb + color
+	}
+	// Se for monocromatica e pb nao veio explicitamente mas total veio
+	if pb == 0 && color == 0 && total > 0 {
+		pb = total
+	}
+
 	if serial == "" {
 		serial = "N/A"
 	}
@@ -187,14 +200,16 @@ func formatPDUString(val interface{}) string {
 	if val == nil {
 		return ""
 	}
+	var s string
 	switch v := val.(type) {
 	case []byte:
-		return strings.TrimSpace(string(v))
+		s = string(v)
 	case string:
-		return strings.TrimSpace(v)
+		s = v
 	default:
-		return fmt.Sprintf("%v", v)
+		s = fmt.Sprintf("%v", v)
 	}
+	return strings.Trim(s, "\x00 \t\r\n")
 }
 
 func formatPDUInt(val interface{}) int64 {

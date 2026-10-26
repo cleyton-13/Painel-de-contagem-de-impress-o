@@ -52,8 +52,10 @@ func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(cfgPath)
 	if err == nil && len(data) > 0 {
 		if err := json.Unmarshal(data, cfg); err == nil {
-			if len(cfg.Impressoras) == 0 {
-				cfg.Impressoras = loadImpressorasTxt(filepath.Join(baseDir, "impressoras.txt"))
+			// Se impressoras.txt tiver conteudo valido, sincroniza
+			txtIps := loadImpressorasTxt(filepath.Join(baseDir, "impressoras.txt"))
+			if len(txtIps) > 0 {
+				cfg.Impressoras = txtIps
 			}
 			return cfg, nil
 		}
@@ -80,7 +82,21 @@ func SaveConfig(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(GetConfigPath(), data, 0644)
+	cfgErr := os.WriteFile(GetConfigPath(), data, 0644)
+
+	// Sincroniza tambem o impressoras.txt
+	baseDir := filepath.Dir(GetConfigPath())
+	impPath := filepath.Join(baseDir, "impressoras.txt")
+	var lines []string
+	for _, ip := range cfg.Impressoras {
+		ip = strings.TrimSpace(ip)
+		if ip != "" {
+			lines = append(lines, ip)
+		}
+	}
+	_ = os.WriteFile(impPath, []byte(strings.Join(lines, "\r\n")+"\r\n"), 0644)
+
+	return cfgErr
 }
 
 func loadImpressorasTxt(path string) []string {
