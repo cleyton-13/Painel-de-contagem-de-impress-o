@@ -21,16 +21,22 @@ func AbrirTela() error {
 	baseDir := filepath.Dir(exePath)
 	ps1Path := filepath.Join(baseDir, "spx_gui.ps1")
 
+	// Prepend UTF-8 BOM so Windows PowerShell 5.1 always decodes characters properly
+	bom := []byte{0xEF, 0xBB, 0xBF}
+	scriptBytes := append(bom, []byte(guiScript)...)
+
 	// Garante que o arquivo spx_gui.ps1 exista na pasta do executável
-	if err := os.WriteFile(ps1Path, []byte(guiScript), 0644); err != nil {
+	if err := os.WriteFile(ps1Path, scriptBytes, 0644); err != nil {
 		// Se não conseguir gravar na pasta local por permissão, grava no Temp
 		ps1Path = filepath.Join(os.TempDir(), "spx_gui.ps1")
-		_ = os.WriteFile(ps1Path, []byte(guiScript), 0644)
+		_ = os.WriteFile(ps1Path, scriptBytes, 0644)
 	}
 
 	cmd := exec.Command("powershell.exe",
 		"-NoProfile",
 		"-ExecutionPolicy", "Bypass",
+		"-Sta",
+		"-WindowStyle", "Hidden",
 		"-File", ps1Path,
 		"-ExePath", exePath,
 	)

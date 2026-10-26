@@ -30,9 +30,12 @@ func main() {
 	// Abre diretamente o assistente visual para preenchimento dos dados das impressoras
 	if len(os.Args) < 2 {
 		if err := gui.AbrirTela(); err != nil {
-			fmt.Printf("Falha abrindo interface grafica: %v\n", err)
+			fmt.Printf("\n[FALHA] Falha ao abrir assistente grafico: %v\n", err)
 			printBanner()
 			printAjuda()
+			fmt.Println("\nPressione Enter para sair...")
+			var dummy string
+			fmt.Scanln(&dummy)
 		}
 		return
 	}
