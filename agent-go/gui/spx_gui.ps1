@@ -878,10 +878,6 @@ $sStr = [string]$cfg.servidorBase
 Log-Msg "Filial ativa: $uStr | Servidor: $sStr" "INFO"
 AtualizarStatusServico
 
-[void]$window.ShowDialog()
-
-
-
 $btnConsultarSerial.Add_Click({
     SalvarTudo $false
     Log-Msg "Consultando identificacao (Modelo e Serial) das impressoras..." "INFO"
@@ -926,3 +922,5 @@ $btnConsultarSerial.Add_Click({
     $btnConsultarSerial.IsEnabled = $true
     $btnConsultarSerial.Content = "Identificar Impressoras (Serial)"
 })
+
+[void]$window.ShowDialog()
