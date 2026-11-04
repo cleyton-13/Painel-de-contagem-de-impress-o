@@ -27,8 +27,47 @@ type ArquivoInfo struct {
 	TamanhoBytes int64  `json:"tamanhoBytes"`
 }
 
-func VerificarEAtualizar(cfg *config.Config) (bool, error) {
-	if !cfg.AutoUpdate || cfg.ServidorBase == "" {
+const maxBinaryBytes = 60 << 20 // Limite seguro de 60 MB para o executavel
+
+var updaterTransport = &http.Transport{
+	Proxy:                 http.ProxyFromEnvironment,
+	MaxIdleConns:          4,
+	IdleConnTimeout:       60 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ResponseHeaderTimeout: 15 * time.Second,
+	TLSClientConfig: &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true,
+	},
+}
+
+var metaHTTPClient = &http.Client{
+	Timeout:   20 * time.Second,
+	Transport: updaterTransport,
+}
+
+var downloadHTTPClient = &http.Client{
+	Timeout:   3 * time.Minute,
+	Transport: updaterTransport,
+}
+
+func renameWithRetry(src, dst string) error {
+	var lastErr error
+	for i := 0; i < 4; i++ {
+		if err := os.Rename(src, dst); err == nil {
+			return nil
+		} else {
+			lastErr = err
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	return lastErr
+}
+
+// VerificarEAtualizar consulta o manifesto remoto e atualiza o binario de forma atomica.
+// Quando forcarManual=true, executa mesmo que cfg.AutoUpdate esteja desativado.
+func VerificarEAtualizar(cfg *config.Config, forcarManual bool) (bool, error) {
+	if (!forcarManual && !cfg.AutoUpdate) || strings.TrimSpace(cfg.ServidorBase) == "" {
 		return false, nil
 	}
 
@@ -38,15 +77,16 @@ func VerificarEAtualizar(cfg *config.Config) (bool, error) {
 	}
 
 	urlVersao := fmt.Sprintf("%s/api/agente/versao", base)
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			Proxy:           http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
+	reqVer, err := http.NewRequest("GET", urlVersao, nil)
+	if err != nil {
+		return false, fmt.Errorf("erro criando request de versao: %w", err)
+	}
+	if cfg.ApiKey != "" {
+		reqVer.Header.Set("x-api-key", cfg.ApiKey)
+		reqVer.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	}
 
-	resp, err := client.Get(urlVersao)
+	resp, err := metaHTTPClient.Do(reqVer)
 	if err != nil {
 		return false, fmt.Errorf("erro consultando versao: %w", err)
 	}
@@ -57,12 +97,12 @@ func VerificarEAtualizar(cfg *config.Config) (bool, error) {
 	}
 
 	var manifest VersaoManifest
-	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&manifest); err != nil {
 		return false, fmt.Errorf("erro decodificando json: %w", err)
 	}
 
 	infoExe, ok := manifest.Arquivos["spx-agent.exe"]
-	if !ok || infoExe.Sha256 == "" {
+	if !ok || len(infoExe.Sha256) < 64 {
 		return false, nil // Ainda nao ha binario compilado registrado no servidor
 	}
 
@@ -80,14 +120,24 @@ func VerificarEAtualizar(cfg *config.Config) (bool, error) {
 		return false, nil // Ja esta na versao mais recente
 	}
 
-	log.Printf("[UPDATER] Nova versao detectada! Local=%s Remota=%s", currentHash[:8], infoExe.Sha256[:8])
+	log.Printf("[UPDATER] Nova versao detectada (%s)! Local=%s Remota=%s",
+		manifest.Versao, currentHash[:8], infoExe.Sha256[:8])
 
-	// 1. Download para arquivo temporario
+	// 1. Download para arquivo temporario com limite de tamanho
 	urlDownload := fmt.Sprintf("%s/api/agente/download?arquivo=spx-agent.exe", base)
 	tmpExe := currentExe + ".tmp"
 	oldExe := currentExe + ".old"
 
-	dlResp, err := client.Get(urlDownload)
+	reqDl, err := http.NewRequest("GET", urlDownload, nil)
+	if err != nil {
+		return false, fmt.Errorf("erro criando request de download: %w", err)
+	}
+	if cfg.ApiKey != "" {
+		reqDl.Header.Set("x-api-key", cfg.ApiKey)
+		reqDl.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	}
+
+	dlResp, err := downloadHTTPClient.Do(reqDl)
 	if err != nil {
 		return false, fmt.Errorf("erro baixando nova versao: %w", err)
 	}
@@ -102,31 +152,33 @@ func VerificarEAtualizar(cfg *config.Config) (bool, error) {
 		return false, fmt.Errorf("erro criando tmp file: %w", err)
 	}
 
-	if _, err := io.Copy(out, dlResp.Body); err != nil {
-		out.Close()
-		os.Remove(tmpExe)
+	if _, err := io.Copy(out, io.LimitReader(dlResp.Body, maxBinaryBytes)); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpExe)
 		return false, fmt.Errorf("erro salvando tmp file: %w", err)
 	}
-	out.Close()
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmpExe)
+		return false, fmt.Errorf("erro fechando tmp file: %w", err)
+	}
 
-	// 2. Valida hash do download
+	// 2. Valida hash do download antes de promover
 	dlHash, err := calcularSha256(tmpExe)
 	if err != nil || !strings.EqualFold(dlHash, infoExe.Sha256) {
-		os.Remove(tmpExe)
+		_ = os.Remove(tmpExe)
 		return false, fmt.Errorf("hash do arquivo baixado divergente. Atualizacao abortada")
 	}
 
-	// 3. Substituicao atomica no Windows:
-	// O Windows permite renomear um executavel em execucao (mas nao deletar ou sobrescrever diretamente).
+	// 3. Substituicao atomica no Windows com retry contra locks temporarios do Antivirus/Defender
 	_ = os.Remove(oldExe)
-	if err := os.Rename(currentExe, oldExe); err != nil {
-		os.Remove(tmpExe)
+	if err := renameWithRetry(currentExe, oldExe); err != nil {
+		_ = os.Remove(tmpExe)
 		return false, fmt.Errorf("erro renomeando binario atual: %w", err)
 	}
 
-	if err := os.Rename(tmpExe, currentExe); err != nil {
-		// Rollback se falhar
-		_ = os.Rename(oldExe, currentExe)
+	if err := renameWithRetry(tmpExe, currentExe); err != nil {
+		// Rollback imediato se falhar
+		_ = renameWithRetry(oldExe, currentExe)
 		return false, fmt.Errorf("erro promovendo novo binario: %w", err)
 	}
 
@@ -148,12 +200,10 @@ func calcularSha256(filePath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// LimparBackups remove eventuais .old deixados por atualizacoes anteriores
+// LimparBackups remove eventuais .old / .tmp deixados por atualizacoes anteriores
 func LimparBackups() {
 	if exe, err := os.Executable(); err == nil {
-		old := exe + ".old"
-		_ = os.Remove(old)
-		tmp := exe + ".tmp"
-		_ = os.Remove(tmp)
+		_ = os.Remove(exe + ".old")
+		_ = os.Remove(exe + ".tmp")
 	}
 }

@@ -2,9 +2,16 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { isAuthenticated } from '@/lib/auth';
+import { invalidateImpressorasCache } from '@/lib/business';
 import { revalidatePath } from 'next/cache';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
   const contratos = await prisma.perfilFranquia.findMany({
     orderBy: { nome: 'asc' },
     include: { unidades: { select: { id: true, nome: true } } },
@@ -14,7 +21,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!(await isAuthenticated())) {
-    return NextResponse.json({ error: 'Nao autorizado. Acesso restrito a administradores.' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Não autorizado. Acesso restrito a administradores.' },
+      { status: 401 }
+    );
   }
 
   try {
@@ -34,24 +44,24 @@ export async function POST(request: Request) {
     } = body;
 
     if (!nome || String(nome).trim() === '') {
-      return NextResponse.json({ error: 'Nome do perfil obrigatorio' }, { status: 400 });
+      return NextResponse.json({ error: 'Nome do perfil é obrigatório.' }, { status: 400 });
     }
 
     const temFixa = temFranquiaFixa ?? true;
     const data: Record<string, unknown> = {
       nome: String(nome).trim(),
-      tarifaAvulsaPB: Number(tarifaAvulsaPB ?? 0.04),
-      tarifaAvulsaColor: Number(tarifaAvulsaColor ?? 0.25),
-      temFranquiaFixa: temFixa,
-      precoResmaPapel: Number(precoResmaPapel ?? 28.0),
+      tarifaAvulsaPB: Math.max(0, Number(tarifaAvulsaPB ?? 0.04) || 0),
+      tarifaAvulsaColor: Math.max(0, Number(tarifaAvulsaColor ?? 0.25) || 0),
+      temFranquiaFixa: Boolean(temFixa),
+      precoResmaPapel: Math.max(0, Number(precoResmaPapel ?? 28.0) || 0),
     };
 
     if (temFixa) {
-      data.valorFixoMensal = Number(valorFixoMensal ?? 500.0);
-      data.cotaPB = Number(cotaPB ?? 5000);
-      data.cotaColor = Number(cotaColor ?? 1000);
-      data.excedentePB = Number(excedentePB ?? 0.05);
-      data.excedenteColor = Number(excedenteColor ?? 0.3);
+      data.valorFixoMensal = Math.max(0, Number(valorFixoMensal ?? 500.0) || 0);
+      data.cotaPB = Math.max(0, Math.round(Number(cotaPB ?? 5000) || 0));
+      data.cotaColor = Math.max(0, Math.round(Number(cotaColor ?? 1000) || 0));
+      data.excedentePB = Math.max(0, Number(excedentePB ?? 0.05) || 0);
+      data.excedenteColor = Math.max(0, Number(excedenteColor ?? 0.3) || 0);
     } else {
       data.valorFixoMensal = null;
       data.cotaPB = null;
@@ -69,10 +79,11 @@ export async function POST(request: Request) {
           data: data as Prisma.PerfilFranquiaCreateInput,
         });
 
+    invalidateImpressorasCache();
     revalidatePath('/');
     return NextResponse.json({ success: true, contrato });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[CONTRATOS POST]', error);
+    return NextResponse.json({ error: 'Falha ao salvar perfil de franquia.' }, { status: 500 });
   }
 }

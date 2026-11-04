@@ -36,6 +36,7 @@ CREDENCIAIS.md
 
 # instaladores offline (pesados, ~350MB)
 Ferramentas/Instaladores/
+Ferramentas/OllamaSetup.exe
 
 # debug
 npm-debug.log*
@@ -48,9 +49,20 @@ yarn-error.log*
 dev.log
 dev-err.log
 
-# utilitarios locais com credenciais hardcoded (operacao local, fora do repo)
-agente/
+# utilitarios locais, binarios compilados e configs com chaves locais
+/agente/
+**/config.local.ps1
+**/config.producao.ps1
+**/config.homolog.ps1
+public/agente/*.exe
+agent-go/*.exe
+agent-go/cache_impressoras.json
 scratch/
+__pycache__/
+*.pyc
+*.tmp
+*.old
+*.bak
 Ferramentas/CONFIGU*PRISMA*
 Ferramentas/atual/CONFIGU*PRISMA*
 db_check.js
@@ -68,8 +80,9 @@ test_gemini2.js
 test_agent_upload.ps1
 log_ia.txt
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
 
 # vercel
 .vercel

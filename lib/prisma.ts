@@ -1,4 +1,4 @@
-﻿// lib/prisma.ts
+// lib/prisma.ts
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -15,17 +15,23 @@ function getDatabaseSchema(): string | undefined {
 
 function createClient() {
   const schema = getDatabaseSchema();
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 20,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+  });
+
+  pool.on('error', (err) => {
+    console.error('[Prisma PG Pool] Erro inesperado em conexão ociosa:', err.message);
+  });
+
   const adapter = new PrismaPg(pool, schema ? { schema } : undefined);
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'info'] : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 }
 
-export const prisma = global.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== 'production') {
-  // Prevent multiple instances in hot-reload dev environment
-  global.prisma = prisma;
-}
+export const prisma = globalThis.prisma ?? createClient();
+globalThis.prisma = prisma;

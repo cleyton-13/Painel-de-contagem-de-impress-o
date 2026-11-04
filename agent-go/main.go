@@ -13,7 +13,7 @@ import (
 	"spx-agent/updater"
 )
 
-const Versao = "2.1.0"
+const Versao = "2.2.0"
 
 func main() {
 	// Se iniciado pelo Windows Service Manager (SCM), executa como servico
@@ -35,7 +35,7 @@ func main() {
 			printAjuda()
 			fmt.Println("\nPressione Enter para sair...")
 			var dummy string
-			fmt.Scanln(&dummy)
+			_, _ = fmt.Scanln(&dummy)
 		}
 		return
 	}
@@ -45,20 +45,27 @@ func main() {
 	switch cmd {
 	case "run", "exec":
 		printBanner()
+		updater.LimparBackups()
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			fmt.Printf("Erro carregando config: %v\n", err)
-			return
+			os.Exit(1)
 		}
 		fmt.Printf("Unidade: %s\nServidor: %s\nImpressoras: %v\n\n", cfg.Unidade, cfg.ServidorBase, cfg.Impressoras)
 		service.ExecutarCicloCompleto(cfg)
 
 	case "update":
 		printBanner()
-		cfg, _ := config.LoadConfig()
+		updater.LimparBackups()
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			fmt.Printf("Erro carregando config: %v\n", err)
+			os.Exit(1)
+		}
 		fmt.Println("Verificando se ha atualizacoes no servidor...")
-		if atualizado, err := updater.VerificarEAtualizar(cfg); err != nil {
+		if atualizado, err := updater.VerificarEAtualizar(cfg, true); err != nil {
 			fmt.Printf("Erro na verificacao: %v\n", err)
+			os.Exit(1)
 		} else if atualizado {
 			fmt.Println("Agente atualizado com sucesso!")
 		} else {
@@ -68,47 +75,53 @@ func main() {
 	case "service":
 		if len(os.Args) < 3 {
 			fmt.Println("Uso: spx-agent service [install|remove|start|stop]")
-			return
+			os.Exit(1)
 		}
 		sub := os.Args[2]
 		switch sub {
 		case "install":
 			if err := service.InstallService(); err != nil {
 				fmt.Printf("Erro: %v\n", err)
-			} else {
-				fmt.Println("Servico SPXAgentService instalado com sucesso! Inicializacao automatica habilitada.")
+				os.Exit(1)
 			}
+			fmt.Println("Servico SPXAgentService instalado com sucesso! Inicializacao automatica habilitada.")
 		case "remove", "uninstall":
 			if err := service.RemoveService(); err != nil {
 				fmt.Printf("Erro: %v\n", err)
-			} else {
-				fmt.Println("Servico SPXAgentService removido com sucesso!")
+				os.Exit(1)
 			}
+			fmt.Println("Servico SPXAgentService removido com sucesso!")
 		case "start":
 			if err := service.StartService(); err != nil {
 				fmt.Printf("Erro: %v\n", err)
-			} else {
-				fmt.Println("Servico iniciado com sucesso!")
+				os.Exit(1)
 			}
+			fmt.Println("Servico iniciado com sucesso!")
 		case "stop":
 			if err := service.StopService(); err != nil {
 				fmt.Printf("Erro: %v\n", err)
-			} else {
-				fmt.Println("Servico parado com sucesso!")
+				os.Exit(1)
 			}
+			fmt.Println("Servico parado com sucesso!")
 		default:
 			fmt.Printf("Subcomando desconhecido: %s\n", sub)
+			os.Exit(1)
 		}
 
 	case "gui", "tela":
 		if err := gui.AbrirTela(); err != nil {
 			fmt.Printf("Falha abrindo interface grafica: %v\n", err)
+			os.Exit(1)
 		}
 
 	case "config":
 		if len(os.Args) > 2 && (os.Args[2] == "--cli" || os.Args[2] == "-c") {
 			printBanner()
-			cfg, _ := config.LoadConfig()
+			cfg, err := config.LoadConfig()
+			if err != nil {
+				fmt.Printf("Erro carregando config: %v\n", err)
+				os.Exit(1)
+			}
 			fmt.Printf("Configuracao carregada de %s:\n", config.GetConfigPath())
 			fmt.Printf("  Unidade:          %s\n", cfg.Unidade)
 			fmt.Printf("  Servidor:         %s\n", cfg.ServidorBase)
@@ -119,6 +132,7 @@ func main() {
 		} else {
 			if err := gui.AbrirTela(); err != nil {
 				fmt.Printf("Falha abrindo interface grafica: %v\n", err)
+				os.Exit(1)
 			}
 		}
 

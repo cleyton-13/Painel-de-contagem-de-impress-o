@@ -1,21 +1,5 @@
 // ============================================================
-// server.js - Painel de Impressoras BI
-//
-// Escuta EM DUAS PORTAS ao mesmo tempo:
-//  - HTTP  : porta 3000 (usada pelo dominio spx-hub.spximagem.com.br
-//            e pelos agentes via http://spx-hub.spximagem.com.br:3000)
-//  - HTTPS : porta 3443 (acesso interno/seguro opcional)
-//
-// CERTIFICADO (HTTPS):
-//  - Se existirem cert/fullchain.pem + cert/privkey.pem (Let's Encrypt
-//    / dominio real) -> usa o certificado REAL.
-//  - Senao, usa cert/painel.pfx + cert/senha.txt (auto-assinado gerado
-//    por GERAR_CERTIFICADO.ps1).
-//  - Para trocar por um dominio: basta substituir os arquivos na pasta
-//    "cert" e reiniciar o servidor (nenhuma alteracao de codigo).
-//
-// OBS: executa com o build webpack (npm run build) por conta do caminho
-// de rede compartilhado.
+// server.js - Painel de Impressoras BI (Produção Enterprise)
 // ============================================================
 
 const http = require('http');
@@ -50,7 +34,7 @@ function criarOptionsCert(certDir) {
 }
 
 async function main() {
-  const app = next({ dev: false, dir: __dirname, conf: { distDir: '.next' } });
+  const app = next({ dev: false, dir: __dirname });
   const handle = app.getRequestHandler();
   await app.prepare();
 
@@ -59,32 +43,51 @@ async function main() {
   const host = process.env.HOST || '0.0.0.0';
   const certDir = path.join(__dirname, 'cert');
 
-  // --- HTTP (porta 3000) ---
+  // --- Servidor HTTP ---
   const httpServer = http.createServer((req, res) => handle(req, res));
   httpServer.listen(portHttp, host, () => {
-    console.log(`[server.js] HTTP  : http://${host}:${portHttp}  (agentes/dominio spx-hub)`);
-    console.log(`[server.js] Acesse: http://spx-hub.spximagem.com.br:${portHttp}`);
+    console.log(`[server.js] HTTP  : http://${host}:${portHttp}`);
   });
 
-  // --- HTTPS (porta 3443, opcional) ---
+  // --- Servidor HTTPS (opcional) ---
   let httpsServer = null;
   const cert = criarOptionsCert(certDir);
   if (cert && cert.options) {
     httpsServer = https.createServer(cert.options, (req, res) => handle(req, res));
     httpsServer.listen(portHttps, host, () => {
-      console.log(`[server.js] HTTPS : https://${host}:${portHttps}  (interno, cert ${cert.tipo})`);
+      console.log(`[server.js] HTTPS : https://${host}:${portHttps} (${cert.tipo})`);
     });
-  } else {
-    console.log('[server.js] ATENCAO: sem certificado em "cert". HTTPS desabilitado (roda somente HTTP).');
   }
 
+  let isShuttingDown = false;
   const shutdown = () => {
-    console.log('[server.js] Encerrando...');
-    httpServer.close(() => {
-      if (httpsServer) httpsServer.close(() => process.exit(0));
-      else process.exit(0);
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log('[server.js] Encerrando conexões de forma graciosa...');
+
+    const forceTimer = setTimeout(() => {
+      console.warn('[server.js] Forçando encerramento após timeout.');
+      process.exit(0);
+    }, 5000);
+
+    const closeHttp = new Promise((resolve) => {
+      if (httpServer.closeAllConnections) httpServer.closeAllConnections();
+      httpServer.close(() => resolve());
+    });
+
+    const closeHttps = new Promise((resolve) => {
+      if (!httpsServer) return resolve();
+      if (httpsServer.closeAllConnections) httpsServer.closeAllConnections();
+      httpsServer.close(() => resolve());
+    });
+
+    Promise.all([closeHttp, closeHttps]).then(() => {
+      clearTimeout(forceTimer);
+      console.log('[server.js] Servidor encerrado com sucesso.');
+      process.exit(0);
     });
   };
+
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }

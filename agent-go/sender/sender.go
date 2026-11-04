@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
 	"spx-agent/collector"
 	"spx-agent/config"
 )
@@ -21,12 +22,27 @@ type IngestaoPayload struct {
 }
 
 type IngestaoResponse struct {
-	Success       bool     `json:"success"`
-	Unidade       string   `json:"unidade"`
-	NewReadings   int      `json:"newReadings"`
-	Atualizadas   int      `json:"atualizadas"`
-	Duplicadas    int      `json:"duplicadas"`
-	Erros         []string `json:"erros"`
+	Success     bool     `json:"success"`
+	Unidade     string   `json:"unidade"`
+	NewReadings int      `json:"newReadings"`
+	Atualizadas int      `json:"atualizadas"`
+	Duplicadas  int      `json:"duplicadas"`
+	Erros       []string `json:"erros"`
+}
+
+var sharedHTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     60 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+		TLSClientConfig: &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: true, // Suporte a certificados internos autoassinados
+		},
+	},
 }
 
 func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
@@ -47,7 +63,7 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 
 	base := strings.TrimRight(strings.TrimSpace(cfg.ServidorBase), "/")
 	if base == "" {
-		base = "http://localhost:3001"
+		base = "http://localhost:3000"
 	}
 	if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
 		base = "http://" + base
@@ -62,20 +78,11 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 	url := fmt.Sprintf("%s%s", base, endpoint)
 	log.Printf("[SENDER] Enviando %d leituras para %s (Unidade: %s)...", len(leituras), url, cfg.Unidade)
 
-	// Cliente HTTP tolerante com timeout de 30s, suporte a HTTPS e Proxy corporativo
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			Proxy:           http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-
-	maxTentativas := 10
+	maxTentativas := 8
 	baseDelay := 3.0
 
 	for tentativa := 1; tentativa <= maxTentativas; tentativa++ {
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 		if err != nil {
 			return fmt.Errorf("erro criando request: %w", err)
 		}
@@ -86,12 +93,12 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 			req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 		}
 
-		resp, err := client.Do(req)
+		resp, err := sharedHTTPClient.Do(req)
 		if err == nil {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+			_ = resp.Body.Close()
 
-			if resp.StatusCode == 200 {
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				var ingResp IngestaoResponse
 				_ = json.Unmarshal(body, &ingResp)
 				log.Printf("[SENDER] [SUCESSO] Tentativa %d/%d: Novas=%d, Atualizadas=%d, Duplicadas=%d",
@@ -101,14 +108,19 @@ func EnviarLeituras(cfg *config.Config, leituras []collector.Leitura) error {
 
 			log.Printf("[SENDER] Servidor retornou HTTP %d (Tentativa %d/%d): %s",
 				resp.StatusCode, tentativa, maxTentativas, string(body))
+
+			// Erros definitivos de autenticacao ou payload invalido nao devem travar em retry
+			if resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 413 {
+				return fmt.Errorf("envio rejeitado pelo servidor (HTTP %d): verifique API Key e configuracao", resp.StatusCode)
+			}
 		} else {
 			log.Printf("[SENDER] Falha na conexao (Tentativa %d/%d): %v", tentativa, maxTentativas, err)
 		}
 
 		if tentativa < maxTentativas {
 			delaySec := time.Duration(baseDelay*math.Pow(1.8, float64(tentativa-1))) * time.Second
-			if delaySec > 2*time.Minute {
-				delaySec = 2 * time.Minute
+			if delaySec > 90*time.Second {
+				delaySec = 90 * time.Second
 			}
 			log.Printf("[SENDER] Aguardando %v antes do proximo retry...", delaySec)
 			time.Sleep(delaySec)

@@ -2,6 +2,7 @@ export interface Unidade {
   id: string;
   nome: string;
   nomeSanitizado: string;
+  emailContato?: string | null;
   perfilFranquiaId?: string | null;
   perfilFranquia?: PerfilFranquia | null;
   aliases?: UnidadeAlias[];
@@ -75,7 +76,7 @@ export interface ConfiguracaoSistema {
   usarSeparacaoCores: boolean;
   faturamentoHabilitado: boolean;
   tarifaUnica: number;
-  acessivel: boolean;
+  acessivel?: boolean;
   erro?: string;
   atualizadoEm: string;
 }
@@ -98,6 +99,8 @@ export interface DashboardKPIs {
   custoTotal: number;
   proporcaoPB: number; // percentage 0-100
   proporcaoColor: number; // percentage 0-100
+  cotaTotalPB?: number;
+  cotaTotalColor?: number;
   unidadeLider: {
     nome: string;
     total: number;
@@ -211,6 +214,7 @@ export interface ConfiguracaoIA {
   provedor: ProvedorIA;
   modelo: string;
   apiKey: string;
+  apiKeyConfigurada?: boolean;
   endpointUrl: string;
   temperatura: number;
   maxTokens: number;
