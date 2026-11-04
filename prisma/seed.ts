@@ -10,7 +10,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('Limpando banco de dados...');
+  console.log('Inicializando seed do banco de dados...');
   await prisma.leituraImpressora.deleteMany();
   await prisma.impressora.deleteMany();
   await prisma.unidadeAlias.deleteMany();
@@ -18,11 +18,21 @@ async function main() {
   await prisma.perfilFranquia.deleteMany();
   await prisma.configuracaoSLA.deleteMany();
   await prisma.arquivoIngerido.deleteMany();
+  await prisma.configuracaoSistema.deleteMany();
+
+  // ============================================================
+  // CONFIGURACAO DO SISTEMA
+  // ============================================================
+  await prisma.configuracaoSistema.create({
+    data: {
+      id: 'default',
+      usarSeparacaoCores: true,
+    },
+  });
 
   // ============================================================
   // PERFIS DE FRANQUIA
   // ============================================================
-  console.log('Criando perfis de franquia...');
   const perf1 = await prisma.perfilFranquia.create({
     data: {
       nome: 'Contrato Padrão Filiais',
@@ -69,7 +79,6 @@ async function main() {
   // ============================================================
   // UNIDADES
   // ============================================================
-  console.log('Criando unidades...');
   const unid1 = await prisma.unidade.create({
     data: {
       nome: 'Santana de Parnaíba',
@@ -117,9 +126,8 @@ async function main() {
   });
 
   // ============================================================
-  // IMPRESSORAS + LEITURAS HISTÓRICAS
+  // IMPRESSORAS + LEITURAS
   // ============================================================
-  console.log('Criando impressoras e leituras...');
   const printers = [
     { serial: 'KM-C360I-99201', modelo: 'Konica Minolta bizhub C360i', ip: '192.168.10.45', apelido: 'KONICA RECEPÇÃO', unidade: unid1, pbBase: 4250, colBase: 1120, reset: false },
     { serial: 'KM-4050I-88112', modelo: 'Konica Minolta bizhub 4050i', ip: '192.168.10.46', apelido: 'BIZHUB RECRUTAMENTO', unidade: unid1, pbBase: 3100, colBase: 0, reset: false },
@@ -145,8 +153,6 @@ async function main() {
       },
     });
 
-    // Gera leitura inicial (contadores absolutos) + leituras diárias
-    // Simula acumulação: 90 dias de histórico
     let pb = 5000 + i * 1000;
     let col = 300 + i * 200;
     const dPBDiario = Math.max(20, Math.round(p.pbBase / 60));
@@ -157,7 +163,6 @@ async function main() {
       date.setDate(now.getDate() - day);
       date.setHours(9 + (day % 8), 0, 0, 0);
 
-      // Reset de placa na metade do histórico (badge "Placa Resetada no Período")
       if (p.reset && day === 45) {
         pb = 120;
         col = 30;
@@ -190,20 +195,18 @@ async function main() {
   // ============================================================
   // CONFIG SLA
   // ============================================================
-  console.log('Criando ConfiguracaoSLA...');
   await prisma.configuracaoSLA.create({
     data: {
       id: 'default_config',
       horarioLimite: '17:00',
       alertasAtivos: true,
-      emailsDestinatarios: 'admin@empresa.com, ti@empresa.com, diretoria@empresa.com',
+      emailsDestinatarios: 'admin@empresa.com, ti@empresa.com',
     },
   });
 
   // ============================================================
-  // ARQUIVOS INGERIDOS (mock para aba armazenamento)
+  // ARQUIVOS INGERIDOS
   // ============================================================
-  console.log('Criando ArquivoIngerido...');
   await prisma.arquivoIngerido.createMany({
     data: [
       { nomeArquivo: 'relatorio_impressoras_Santana_2026-08-03_09-00-00.csv', tamanhoBytes: 154200, status: 'PROCESSADO' },
@@ -219,10 +222,11 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Erro no seed:', e);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
+    await pool.end();
   });

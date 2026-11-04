@@ -16,10 +16,10 @@ model Unidade {
   perfilFranquiaId String?
   impressoras      Impressora[]
   leituras         LeituraImpressora[]
-  perfilFranquia   PerfilFranquia?     @relation(fields: [perfilFranquiaId], references: [id])
+  perfilFranquia   PerfilFranquia?     @relation(fields: [perfilFranquiaId], references: [id], onDelete: SetNull)
   aliases          UnidadeAlias[]
 
-  @@index([nomeSanitizado])
+  @@index([perfilFranquiaId])
 }
 
 model UnidadeAlias {
@@ -29,7 +29,7 @@ model UnidadeAlias {
   createdAt DateTime @default(now())
   unidade   Unidade  @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
 
-  @@index([alias])
+  @@index([unidadeId])
 }
 
 model Impressora {
@@ -66,13 +66,15 @@ model LeituraImpressora {
   impressoraId String?
   unidadeId    String
   createdAt    DateTime    @default(now())
-  impressora   Impressora? @relation(fields: [impressoraId], references: [id])
+  impressora   Impressora? @relation(fields: [impressoraId], references: [id], onDelete: SetNull)
   unidade      Unidade     @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
 
   @@unique([ip, serial, dataHora])
+  @@index([dataHora])
   @@index([unidadeId, dataHora])
   @@index([impressoraId, dataHora])
   @@index([serial, dataHora])
+  @@index([serial, unidadeId, dataHora])
 }
 
 model PerfilFranquia {
@@ -110,7 +112,7 @@ model ArquivoIngerido {
   novas             Int      @default(0)
   atualizadas       Int      @default(0)
 
-  @@index([nomeArquivo])
+  @@index([dataProcessamento])
 }
 
 model ConfiguracaoSistema {

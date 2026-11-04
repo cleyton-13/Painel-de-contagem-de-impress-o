@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getConfiguracaoSistema, setConfigContagem } from '@/lib/config';
 import { isAuthenticated } from '@/lib/auth';
+import { invalidateImpressorasCache } from '@/lib/business';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
   try {
     const config = await getConfiguracaoSistema();
     return NextResponse.json({
@@ -12,14 +19,17 @@ export async function GET() {
       atualizadoEm: config.updatedAt.toISOString(),
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[CONFIG GET]', error);
+    return NextResponse.json({ error: 'Falha ao carregar configurações.' }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request) {
   if (!(await isAuthenticated())) {
-    return NextResponse.json({ error: 'Nao autorizado. Acesso restrito a administradores.' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Não autorizado. Acesso restrito a administradores.' },
+      { status: 401 }
+    );
   }
 
   try {
@@ -31,10 +41,17 @@ export async function PATCH(request: Request) {
       body.tarifaUnica !== undefined
     ) {
       await setConfigContagem({
-        ...(body.usarSeparacaoCores !== undefined && { usarSeparacaoCores: !!body.usarSeparacaoCores }),
-        ...(body.faturamentoHabilitado !== undefined && { faturamentoHabilitado: !!body.faturamentoHabilitado }),
-        ...(body.tarifaUnica !== undefined && { tarifaUnica: Math.max(0, Number(body.tarifaUnica) || 0) }),
+        ...(body.usarSeparacaoCores !== undefined && {
+          usarSeparacaoCores: Boolean(body.usarSeparacaoCores),
+        }),
+        ...(body.faturamentoHabilitado !== undefined && {
+          faturamentoHabilitado: Boolean(body.faturamentoHabilitado),
+        }),
+        ...(body.tarifaUnica !== undefined && {
+          tarifaUnica: Math.max(0, Number(body.tarifaUnica) || 0),
+        }),
       });
+      invalidateImpressorasCache();
     }
 
     const config = await getConfiguracaoSistema();
@@ -46,7 +63,7 @@ export async function PATCH(request: Request) {
       atualizadoEm: config.updatedAt.toISOString(),
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[CONFIG PATCH]', error);
+    return NextResponse.json({ error: 'Falha ao atualizar configurações.' }, { status: 500 });
   }
 }

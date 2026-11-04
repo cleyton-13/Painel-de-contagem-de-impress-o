@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Download, FileSpreadsheet, Calendar, Building2, CheckCircle2, 
-  Clock, DollarSign, Palette, Package, AlertTriangle, FileText, X, ArrowRight
+  Clock, DollarSign, Palette, Package, AlertTriangle, FileText, X, ArrowRight, AlertCircle
 } from 'lucide-react';
+import { Unidade } from '@/lib/types';
 
 interface ReportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  unidades?: Unidade[];
 }
 
 interface ReportOption {
@@ -72,34 +74,24 @@ const REPORT_OPTIONS: ReportOption[] = [
   },
 ];
 
-export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => {
-  const [mounted, setMounted] = useState(false);
+export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose, unidades = [] }) => {
   const [selectedReport, setSelectedReport] = useState<string>('sla_conformidade');
   const [periodo, setPeriodo] = useState<string>('30dias');
   const [dataInicio, setDataInicio] = useState<string>('');
   const [dataFim, setDataFim] = useState<string>('');
   const [selectedUnidade, setSelectedUnidade] = useState<string>('ALL');
-  const [unidades, setUnidades] = useState<Array<{ id: string; nome: string }>>([]);
   const [downloading, setDownloading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetch('/api/unidades')
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) setUnidades(data);
-        })
-        .catch(() => {});
-    }
-  }, [isOpen]);
-
-  if (!isOpen || !mounted) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const handleDownload = async () => {
+    setErrorMessage(null);
+    if (periodo === 'custom' && (!dataInicio || !dataFim)) {
+      setErrorMessage('Por favor, defina a data de início e de fim para o intervalo personalizado.');
+      return;
+    }
+
     setDownloading(true);
     try {
       const params = new URLSearchParams();
@@ -135,19 +127,18 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
 
       onClose();
     } catch (err) {
-      alert(`Falha ao exportar relatório: ${err instanceof Error ? err.message : String(err)}`);
+      setErrorMessage(`Falha ao exportar relatório: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setDownloading(false);
     }
   };
 
   const modalJSX = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/60 dark:bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-800 dark:text-slate-100 relative"
+        className="w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-800 dark:text-slate-100 relative"
         onClick={(e) => e.stopPropagation()}
       >
-        
         {/* Header Modal */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/90 dark:bg-slate-900/90">
           <div className="flex items-center space-x-3">
@@ -169,7 +160,13 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
 
         {/* Corpo do Modal */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          
+          {errorMessage && (
+            <div className="flex items-center gap-2 p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* 1. Seleção do Relatório */}
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-3">
@@ -211,7 +208,6 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
 
           {/* 2. Filtros de Período e Unidade */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-200 dark:border-slate-800/80">
-            
             {/* Período */}
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2 flex items-center gap-1.5">
@@ -304,15 +300,13 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
                 <p>O arquivo é gerado com delimitador padrão brasileiro (ponto e vírgula <code>;</code>) e codificação <code className="bg-slate-200/80 dark:bg-slate-700/80 text-slate-800 dark:text-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">UTF-8 BOM</code>, abrindo perfeitamente no Excel sem erros de acentuação.</p>
               </div>
             </div>
-
           </div>
-
         </div>
 
         {/* Footer Modal */}
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 flex items-center justify-between">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Relatório selecionado: <strong className="text-slate-900 dark:text-white font-semibold">{REPORT_OPTIONS.find(o => o.id === selectedReport)?.label}</strong>
+            Relatório: <strong className="text-slate-900 dark:text-white font-semibold">{REPORT_OPTIONS.find((o) => o.id === selectedReport)?.label}</strong>
           </span>
           <div className="flex items-center space-x-2.5">
             <button
@@ -343,7 +337,6 @@ export const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose }) => 
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

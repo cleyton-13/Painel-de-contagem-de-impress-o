@@ -34,57 +34,57 @@ export const FinanceToggle: React.FC<FinanceToggleProps> = ({
       <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden shrink-0">
         <button
           onClick={() => onViewModeChange('comercial')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
             viewMode === 'comercial'
-              ? 'bg-emerald-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-transparent dark:hover:text-slate-200'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
           <Briefcase className="w-3 h-3" />
-          Comercial
+          <span>Comercial</span>
         </button>
         <button
           onClick={() => onViewModeChange('operacional')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
             viewMode === 'operacional'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-transparent dark:hover:text-slate-200'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-200'
           }`}
         >
           <Wrench className="w-3 h-3" />
-          Operacional
+          <span>Operacional</span>
         </button>
       </div>
 
       {/* Checkboxes de seção (só no modo comercial) */}
       {viewMode === 'comercial' && (
-        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 shrink-0">
+        <div className="hidden sm:flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 shrink-0">
           <label className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showCosts}
               onChange={onToggleCosts}
-              className="w-3 h-3 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+              className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
             />
-            Custos
+            <span>Custos</span>
           </label>
           <label className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showProjections}
               onChange={onToggleProjections}
-              className="w-3 h-3 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+              className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
             />
-            Projeções
+            <span>Projeções</span>
           </label>
           <label className="flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showFranchise}
               onChange={onToggleFranchise}
-              className="w-3 h-3 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+              className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
             />
-            Franquia
+            <span>Franquia</span>
           </label>
         </div>
       )}
@@ -92,15 +92,15 @@ export const FinanceToggle: React.FC<FinanceToggleProps> = ({
       {/* Ocultar valores R$ */}
       <button
         onClick={onToggleHideCurrency}
-        className={`flex items-center gap-1 px-2 py-1.5 text-xs font-semibold border rounded-lg transition-all cursor-pointer shrink-0 ${
+        className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border rounded-lg transition-all cursor-pointer shrink-0 ${
           hideCurrency
-            ? 'bg-amber-100 dark:bg-amber-900/60 border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300'
-            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-transparent dark:hover:text-slate-200'
+            ? 'bg-amber-100 dark:bg-amber-900/60 border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 shadow-sm'
+            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
         }`}
-        title={hideCurrency ? 'Mostrar valores em R$' : 'Ocultar valores em R$'}
+        title={hideCurrency ? 'Mostrar valores monetários' : 'Ocultar valores monetários (modo apresentação)'}
       >
-        {hideCurrency ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-        {hideCurrency ? 'Oculto' : 'R$'}
+        {hideCurrency ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        <span>{hideCurrency ? 'Oculto' : 'R$'}</span>
       </button>
     </div>
   );

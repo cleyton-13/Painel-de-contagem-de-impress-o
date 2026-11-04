@@ -1,6 +1,9 @@
 import type { ModeloIA, ProvedorIA, ConfiguracaoIA } from './types';
+import { validateOllamaEndpoint } from './aiConfig';
 
-// Catálogo pré-definido de modelos por provedor
+const REQUEST_TIMEOUT_MS = 45_000;
+
+// Catálogo atualizado de modelos por provedor
 export const MODELOS_IA: Record<ProvedorIA, ModeloIA[]> = {
   groq: [
     { id: 'llama-3.3-70b-versatile', nome: 'Llama 3.3 70B', livre: true, descricao: 'Modelo rápido e gratuito da Groq' },
@@ -13,8 +16,9 @@ export const MODELOS_IA: Record<ProvedorIA, ModeloIA[]> = {
     { id: 'gpt-3.5-turbo', nome: 'GPT-3.5 Turbo', livre: false, descricao: 'Legado e econômico' },
   ],
   gemini: [
-    { id: 'gemini-3.5-flash', nome: 'Gemini 3.5 Flash', livre: true, descricao: 'Gratuito com API Key' },
-    { id: 'gemini-3.5-pro', nome: 'Gemini 3.5 Pro', livre: false, descricao: 'Mais capaz' },
+    { id: 'gemini-2.5-flash', nome: 'Gemini 2.5 Flash', livre: true, descricao: 'Rápido e gratuito com API Key' },
+    { id: 'gemini-2.5-pro', nome: 'Gemini 2.5 Pro', livre: false, descricao: 'Raciocínio avançado' },
+    { id: 'gemini-2.0-flash', nome: 'Gemini 2.0 Flash', livre: true, descricao: 'Estável e veloz' },
   ],
   anthropic: [
     { id: 'claude-3-5-haiku-20241022', nome: 'Claude 3.5 Haiku', livre: false, descricao: 'Rápido' },
@@ -45,6 +49,13 @@ export function getModelosProvedor(provedor: ProvedorIA): ModeloIA[] {
   return MODELOS_IA[provedor] || [];
 }
 
+function normalizeGeminiModel(modelId: string): string {
+  const m = (modelId || '').trim();
+  if (!m || m === 'gemini-3.5-flash') return 'gemini-2.5-flash';
+  if (m === 'gemini-3.5-pro') return 'gemini-2.5-pro';
+  return m;
+}
+
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -56,7 +67,23 @@ interface ProviderCall {
   userPrompt: string;
 }
 
-// Faz a chamada ao provedor configurado e retorna o texto da resposta
+async function safeProviderFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('TimeoutError') || msg.includes('aborted') || msg.includes('timeout')) {
+      throw new Error('Tempo limite excedido ao aguardar resposta do provedor de IA (45s).');
+    }
+    throw new Error(
+      `Falha de conexão com o provedor de IA (${msg}). Verifique conectividade de rede/porta 443 ou se o Ollama local está ativo.`
+    );
+  }
+}
+
 export async function chamarIA({ config, systemPrompt, userPrompt }: ProviderCall): Promise<{
   text: string;
   provider: string;
@@ -64,7 +91,7 @@ export async function chamarIA({ config, systemPrompt, userPrompt }: ProviderCal
   durationMs: number;
 }> {
   if (!config.apiKey && config.provedor !== 'ollama') {
-    throw new Error('Nenhuma API Key configurada. Configure a IA na tela de manutenção.');
+    throw new Error('Nenhuma API Key configurada. Acesse a aba Configurações para informar sua chave.');
   }
 
   const start = Date.now();
@@ -74,6 +101,7 @@ export async function chamarIA({ config, systemPrompt, userPrompt }: ProviderCal
   ];
 
   let text = '';
+  let effectiveModel = config.modelo;
 
   switch (config.provedor) {
     case 'groq':
@@ -86,7 +114,8 @@ export async function chamarIA({ config, systemPrompt, userPrompt }: ProviderCal
       text = await callOpenRouter(config, messages);
       break;
     case 'gemini':
-      text = await callGemini(config, userPrompt, systemPrompt);
+      effectiveModel = normalizeGeminiModel(config.modelo);
+      text = await callGemini({ ...config, modelo: effectiveModel }, userPrompt, systemPrompt);
       break;
     case 'anthropic':
       text = await callAnthropic(config, messages);
@@ -102,13 +131,13 @@ export async function chamarIA({ config, systemPrompt, userPrompt }: ProviderCal
   return {
     text: text.trim(),
     provider: NOMES_PROVEDOR[config.provedor],
-    model: config.modelo,
+    model: effectiveModel,
     durationMs,
   };
 }
 
 async function callGroq(config: ConfiguracaoIA, messages: ChatMessage[]) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await safeProviderFetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -121,13 +150,13 @@ async function callGroq(config: ConfiguracaoIA, messages: ChatMessage[]) {
       max_tokens: config.maxTokens,
     }),
   });
-  if (!res.ok) throw new Error(await extractErr(res));
+  if (!res.ok) throw new Error(await extractHttpErr(res));
   const data = await res.json();
   return data.choices?.[0]?.message?.content || '';
 }
 
 async function callOpenAI(config: ConfiguracaoIA, messages: ChatMessage[]) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await safeProviderFetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -140,18 +169,18 @@ async function callOpenAI(config: ConfiguracaoIA, messages: ChatMessage[]) {
       max_tokens: config.maxTokens,
     }),
   });
-  if (!res.ok) throw new Error(await extractErr(res));
+  if (!res.ok) throw new Error(await extractHttpErr(res));
   const data = await res.json();
   return data.choices?.[0]?.message?.content || '';
 }
 
 async function callOpenRouter(config: ConfiguracaoIA, messages: ChatMessage[]) {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await safeProviderFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey}`,
-      'HTTP-Referer': 'http://localhost:3000',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
       'X-Title': 'Painel Impressoras BI',
     },
     body: JSON.stringify({
@@ -161,16 +190,19 @@ async function callOpenRouter(config: ConfiguracaoIA, messages: ChatMessage[]) {
       max_tokens: config.maxTokens,
     }),
   });
-  if (!res.ok) throw new Error(await extractErr(res));
+  if (!res.ok) throw new Error(await extractHttpErr(res));
   const data = await res.json();
   return data.choices?.[0]?.message?.content || '';
 }
 
 async function callGemini(config: ConfiguracaoIA, userPrompt: string, systemPrompt: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.modelo}:generateContent?key=${config.apiKey}`;
-  const res = await fetch(url, {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.modelo)}:generateContent`;
+  const res = await safeProviderFetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': config.apiKey,
+    },
     body: JSON.stringify({
       contents: [
         {
@@ -184,13 +216,13 @@ async function callGemini(config: ConfiguracaoIA, userPrompt: string, systemProm
       },
     }),
   });
-  if (!res.ok) throw new Error(await extractErr(res));
+  if (!res.ok) throw new Error(await extractHttpErr(res));
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
 }
 
 async function callAnthropic(config: ConfiguracaoIA, messages: ChatMessage[]) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await safeProviderFetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -205,14 +237,18 @@ async function callAnthropic(config: ConfiguracaoIA, messages: ChatMessage[]) {
       messages: messages.slice(1).filter((m) => m.content),
     }),
   });
-  if (!res.ok) throw new Error(await extractErr(res));
+  if (!res.ok) throw new Error(await extractHttpErr(res));
   const data = await res.json();
   return data.content?.map((b: { type: string; text?: string }) => b.text || '').join('') || '';
 }
 
 async function callOllama(config: ConfiguracaoIA, messages: ChatMessage[]) {
-  const url = config.endpointUrl || 'http://localhost:11434/api/chat';
-  const res = await fetch(url, {
+  const baseDefault = process.env.OLLAMA_BASE_URL?.trim()
+    ? `${process.env.OLLAMA_BASE_URL.trim().replace(/\/$/, '')}/api/chat`
+    : 'http://127.0.0.1:11434/api/chat';
+  const targetUrl = config.endpointUrl ? validateOllamaEndpoint(config.endpointUrl) : baseDefault;
+
+  const res = await safeProviderFetch(targetUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -224,29 +260,23 @@ async function callOllama(config: ConfiguracaoIA, messages: ChatMessage[]) {
       },
     }),
   });
-  if (!res.ok) throw new Error(await extractErr(res));
+  if (!res.ok) throw new Error(await extractHttpErr(res));
   const data = await res.json();
   return data.message?.content || '';
 }
 
-async function extractErr(res: Response | unknown): Promise<string> {
-  if (!res || !(res instanceof Response)) {
-    // Erros de rede (fetch failed, timeout, ECONNREFUSED)
-    const errObj = res as Error;
-    const msg = errObj?.message || 'Erro de rede desconhecido';
-    if (msg.includes('fetch failed') || msg.includes('timeout')) {
-      return `Falha de rede ao contatar a IA (${msg}). Verifique se a porta 443 (HTTPS) está liberada no firewall do servidor.`;
-    }
-    return `Erro interno na requisição IA: ${msg}`;
-  }
-
+async function extractHttpErr(res: Response): Promise<string> {
   const text = await res.text().catch(() => '');
   let json: { error?: { message?: string } | string } | null = null;
   try {
     json = JSON.parse(text);
   } catch {
-    // não é JSON
+    // resposta não-JSON
   }
-  const msg = json?.error ? (typeof json.error === 'string' ? json.error : json.error.message) : text;
-  return `Erro HTTP ${res.status} do provedor: ${msg || 'sem detalhes'}`.slice(0, 500);
+  const msg = json?.error
+    ? typeof json.error === 'string'
+      ? json.error
+      : json.error.message
+    : text;
+  return `Erro HTTP ${res.status} do provedor: ${(msg || 'sem detalhes').slice(0, 300)}`;
 }
