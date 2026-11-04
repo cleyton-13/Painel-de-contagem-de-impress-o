@@ -301,7 +301,7 @@ $xamlString = @'
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="btnFastRun" Content="Executar Coleta Agora" Style="{StaticResource PrimaryBtn}" Padding="22,11"/>
+                    <Button x:Name="btnConsultarSerial" Content="Identificar Impressoras (Serial)" Style="{StaticResource ModernBtn}" Margin="0,0,10,0" Padding="16,11"/><Button x:Name="btnFastRun" Content="Executar Coleta Agora" Style="{StaticResource PrimaryBtn}" Padding="22,11"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -497,6 +497,7 @@ $lblServiceStatus = $window.FindName("lblServiceStatus")
 $dotServiceStatus = $window.FindName("dotServiceStatus")
 $pnlServicePill = $window.FindName("pnlServicePill")
 $btnFastRun = $window.FindName("btnFastRun")
+$btnConsultarSerial = $window.FindName("btnConsultarSerial")
 
 $tabBtnImpressoras = $window.FindName("tabBtnImpressoras")
 $tabBtnServidor = $window.FindName("tabBtnServidor")
@@ -879,3 +880,49 @@ AtualizarStatusServico
 
 [void]$window.ShowDialog()
 
+
+
+$btnConsultarSerial.Add_Click({
+    SalvarTudo $false
+    Log-Msg "Consultando identificacao (Modelo e Serial) das impressoras..." "INFO"
+    if (-not (Test-Path $ExePath)) {
+        Log-Msg "Executavel nao encontrado em: $ExePath" "ERRO"
+        return
+    }
+
+    $btnConsultarSerial.IsEnabled = $false
+    $btnConsultarSerial.Content = "Identificando..."
+    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
+
+    $tempOut = Join-Path $baseDir "exec_temp.log"
+    $tempErr = Join-Path $baseDir "exec_err.log"
+
+    $proc = Start-Process -FilePath $ExePath -ArgumentList "run" -NoNewWindow -PassThru -RedirectStandardOutput $tempOut -RedirectStandardError $tempErr
+    $terminou = $proc.WaitForExit(90000)
+    if (-not $terminou) {
+        try { $proc.Kill() } catch { }
+        Log-Msg "Tempo limite excedido na consulta." "AVISO"
+    }
+
+    if (Test-Path $tempOut) {
+        $out = Get-Content $tempOut -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($out -and $out.Trim()) {
+            foreach ($line in ($out -split "[\r\n]+")) {
+                if ($line -match "\[COLLECTOR\]|Modelo:|Serial:") {
+                    Log-Msg $line.Trim() "SUCESSO"
+                } elseif ($line.Trim()) {
+                    Log-Msg $line.Trim() "INFO"
+                }
+            }
+        }
+        Remove-Item $tempOut -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $tempErr) {
+        $err = Get-Content $tempErr -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($err -and $err.Trim()) { Log-Msg $err.Trim() "ERRO" }
+        Remove-Item $tempErr -Force -ErrorAction SilentlyContinue
+    }
+
+    $btnConsultarSerial.IsEnabled = $true
+    $btnConsultarSerial.Content = "Identificar Impressoras (Serial)"
+})

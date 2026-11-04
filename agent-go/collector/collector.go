@@ -1,4 +1,4 @@
-package collector
+﻿package collector
 
 import (
 	"bytes"
@@ -125,6 +125,11 @@ func ColetaParalela(cfg *config.Config) []Leitura {
 				}
 			}
 			resultados = append(resultados, leitura)
+			if leitura.Status == "Online" {
+				log.Printf("[COLLECTOR] %s -> Modelo: %s | Serial: %s | Total: %d (PB: %d, Color: %d)", targetIP, leitura.Modelo, leitura.Serial, leitura.PaginasTotal, leitura.PaginasPB, leitura.PaginasColor)
+			} else {
+				log.Printf("[COLLECTOR] %s -> [OFFLINE] Serial: %s", targetIP, leitura.Serial)
+			}
 			mu.Unlock()
 		}(ip)
 	}
@@ -286,7 +291,7 @@ func finalizeOnlineReading(
 		}
 	}
 
-	// 4. Contadores proprietarios Konica Minolta (18334) — consultados apenas quando suportados pela MIB
+	// 4. Contadores proprietarios Konica Minolta (18334) â€” consultados apenas quando suportados pela MIB
 	var pb, color int64
 	pbSupported := false
 	usedPBFallback := false
