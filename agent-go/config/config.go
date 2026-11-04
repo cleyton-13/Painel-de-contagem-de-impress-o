@@ -26,9 +26,9 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Unidade:          "Matriz",
-		ServidorBase:     "http://localhost:3000",
+		ServidorBase:     "http://192.168.68.162:3000",
 		EndpointIngestao: "/api/ingestao/direto",
-		ApiKey:           "",
+		ApiKey:           "maSZhvdY5OtoAr9RGH2DWQlMsCEzeLXT",
 		Impressoras:      []string{},
 		SNMPCommunity:    "public",
 		SNMPTimeoutSec:   2,
@@ -209,3 +209,4 @@ func extractPs1Val(line string) string {
 	}
 	return ""
 }
+

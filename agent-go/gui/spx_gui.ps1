@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ExePath = ""
 )
 
@@ -17,9 +17,9 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # Config default alinhado ao binario Go v2.2
 $cfg = [PSCustomObject]@{
     unidade = "Matriz"
-    servidorBase = "http://localhost:3000"
+    servidorBase = "http://192.168.68.162:3000"
     endpointIngestao = "/api/ingestao/direto"
-    apiKey = ""
+    apiKey = "maSZhvdY5OtoAr9RGH2DWQlMsCEzeLXT"
     impressoras = @()
     snmpCommunity = "public"
     snmpTimeoutSec = 2
@@ -878,3 +878,4 @@ Log-Msg "Filial ativa: $uStr | Servidor: $sStr" "INFO"
 AtualizarStatusServico
 
 [void]$window.ShowDialog()
+

@@ -12,49 +12,53 @@ if (-not (Test-Path $baseDir)) { $baseDir = $PSScriptRoot }
 
 $cfgPath = Join-Path $baseDir "config.json"
 $impPath = Join-Path $baseDir "impressoras.txt"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# Config default
+# Config default alinhado ao binario Go v2.2
 $cfg = [PSCustomObject]@{
     unidade = "Matriz"
-    servidorBase = "http://localhost:3000"
-    apiKey = "spx-secret-key-12345"
+    servidorBase = "http://192.168.68.162:3000"
+    endpointIngestao = "/api/ingestao/direto"
+    apiKey = "maSZhvdY5OtoAr9RGH2DWQlMsCEzeLXT"
+    impressoras = @()
     snmpCommunity = "public"
     snmpTimeoutSec = 2
-    horariosDisparo = @("08:00", "12:00", "18:00")
-    impressoras = @()
+    horariosDisparo = @("08:00", "12:00", "16:00", "20:00")
+    autoUpdate = $true
 }
 
 if (Test-Path $cfgPath) {
     try {
-        $raw = Get-Content $cfgPath -Raw -Encoding UTF8
+        $raw = (Get-Content $cfgPath -Raw -Encoding UTF8).TrimStart([char]0xfeff)
         $loaded = $raw | ConvertFrom-Json
-        if ($loaded.unidade) { $cfg.unidade = $loaded.unidade }
-        if ($loaded.servidorBase) { $cfg.servidorBase = $loaded.servidorBase }
-        if ($loaded.apiKey) { $cfg.apiKey = $loaded.apiKey }
-        if ($loaded.snmpCommunity) { $cfg.snmpCommunity = $loaded.snmpCommunity }
-        if ($loaded.snmpTimeoutSec) { $cfg.snmpTimeoutSec = $loaded.snmpTimeoutSec }
-        if ($loaded.horariosDisparo) { $cfg.horariosDisparo = $loaded.horariosDisparo }
-        if ($loaded.impressoras) { $cfg.impressoras = $loaded.impressoras }
+        if ($null -ne $loaded.unidade -and $loaded.unidade -ne "") { $cfg.unidade = [string]$loaded.unidade }
+        if ($null -ne $loaded.servidorBase -and $loaded.servidorBase -ne "") { $cfg.servidorBase = [string]$loaded.servidorBase }
+        if ($null -ne $loaded.endpointIngestao -and $loaded.endpointIngestao -ne "") { $cfg.endpointIngestao = [string]$loaded.endpointIngestao }
+        if ($null -ne $loaded.apiKey) { $cfg.apiKey = [string]$loaded.apiKey }
+        if ($null -ne $loaded.snmpCommunity -and $loaded.snmpCommunity -ne "") { $cfg.snmpCommunity = [string]$loaded.snmpCommunity }
+        if ($null -ne $loaded.snmpTimeoutSec -and [int]$loaded.snmpTimeoutSec -gt 0) { $cfg.snmpTimeoutSec = [int]$loaded.snmpTimeoutSec }
+        if ($null -ne $loaded.horariosDisparo -and @($loaded.horariosDisparo).Count -gt 0) { $cfg.horariosDisparo = @($loaded.horariosDisparo) }
+        if ($null -ne $loaded.impressoras) { $cfg.impressoras = @($loaded.impressoras) }
+        if ($null -ne $loaded.autoUpdate) { $cfg.autoUpdate = [bool]$loaded.autoUpdate }
     } catch { }
 }
 
 if (Test-Path $impPath) {
-    $lines = Get-Content $impPath -Encoding UTF8 | ForEach-Object { $_.Trim().TrimStart([char]0xfeff) } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
-    if ($lines.Count -gt 0) { $cfg.impressoras = @($lines) }
+    $lines = @(Get-Content $impPath -Encoding UTF8 | ForEach-Object { $_.Trim().TrimStart([char]0xfeff) } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
+    $cfg.impressoras = $lines
 }
 
 $xamlString = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SPX Impressoras BI - Assistente de Configuracao"
-        Height="740" Width="1060"
+        Height="750" Width="1060"
         MinHeight="660" MinWidth="900"
         WindowStartupLocation="CenterScreen"
         Background="#F8FAFC"
         Foreground="#0F172A"
         FontFamily="Segoe UI, -apple-system, Inter, Arial">
     <Window.Resources>
-        <!-- Modern Standard Button (Clean Light) -->
         <Style x:Key="ModernBtn" TargetType="Button">
             <Setter Property="Background" Value="#FFFFFF"/>
             <Setter Property="Foreground" Value="#334155"/>
@@ -93,7 +97,6 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Primary Button (Vibrant Blue) -->
         <Style x:Key="PrimaryBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
             <Setter Property="Background" Value="#2563EB"/>
             <Setter Property="BorderBrush" Value="#2563EB"/>
@@ -127,7 +130,6 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Success Button (Emerald Green) -->
         <Style x:Key="SuccessBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
             <Setter Property="Background" Value="#059669"/>
             <Setter Property="BorderBrush" Value="#059669"/>
@@ -152,13 +154,15 @@ $xamlString = @'
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#065F46"/>
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.45"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <!-- Danger Button (Subtle Red Light) -->
         <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource ModernBtn}">
             <Setter Property="Background" Value="#FEF2F2"/>
             <Setter Property="BorderBrush" Value="#FECACA"/>
@@ -189,7 +193,6 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Modern Clean TextBox (Light Mode) -->
         <Style x:Key="ModernTextBox" TargetType="TextBox">
             <Setter Property="Background" Value="#FFFFFF"/>
             <Setter Property="Foreground" Value="#0F172A"/>
@@ -222,7 +225,6 @@ $xamlString = @'
             </Setter>
         </Style>
 
-        <!-- Modern Light Segmented Tab Radio Button -->
         <Style x:Key="NavTabBtn" TargetType="RadioButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#64748B"/>
@@ -258,13 +260,9 @@ $xamlString = @'
 
     <Grid>
         <Grid.RowDefinitions>
-            <!-- Header (White with subtle divider) -->
             <RowDefinition Height="76"/>
-            <!-- Nav Bar (Subtle light grey bar) -->
             <RowDefinition Height="56"/>
-            <!-- Content Area (Card on clean background) -->
             <RowDefinition Height="*"/>
-            <!-- Console Area (Compact developer panel) -->
             <RowDefinition Height="185"/>
         </Grid.RowDefinitions>
 
@@ -277,10 +275,8 @@ $xamlString = @'
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Brand / Logo Area -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Background="#2563EB" CornerRadius="10" Width="42" Height="42" Margin="0,0,14,0">
-                        <!-- Clean Vector Printer Icon -->
                         <Path Fill="#FFFFFF" Stretch="Uniform" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"
                               Data="M19 8h-1V3H6v5H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zM8 5h8v3H8V5zm8 12v2H8v-4h8v2zm2-2v-2H6v2H4v-4c0-.55.45-1 1-1h14c.55 0 1 .45 1 1v4h-2z"/>
                     </Border>
@@ -288,14 +284,13 @@ $xamlString = @'
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="SPX Impressoras BI" FontSize="18" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,8,0"/>
                             <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="6" Padding="7,2" VerticalAlignment="Center">
-                                <TextBlock Text="v2.1 Enterprise" FontSize="11" FontWeight="Bold" Foreground="#1D4ED8"/>
+                                <TextBlock Text="v2.2 Enterprise" FontSize="11" FontWeight="Bold" Foreground="#1D4ED8"/>
                             </Border>
                         </StackPanel>
                         <TextBlock Text="Agente Autonomo de Telemetria e Monitoramento de Parque de Impressao" FontSize="11.5" Foreground="#64748B"/>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Service Status Pill -->
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border x:Name="pnlServicePill" Background="#ECFDF5" BorderBrush="#A7F3D0" BorderThickness="1" CornerRadius="20" Padding="14,6">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -305,7 +300,6 @@ $xamlString = @'
                     </Border>
                 </StackPanel>
 
-                <!-- Fast Run Button -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="btnFastRun" Content="Executar Coleta Agora" Style="{StaticResource PrimaryBtn}" Padding="22,11"/>
                 </StackPanel>
@@ -321,7 +315,7 @@ $xamlString = @'
             </StackPanel>
         </Border>
 
-        <!-- MAIN CONTENT PANELS (Clean White Cards on Slate Background) -->
+        <!-- MAIN CONTENT PANELS -->
         <Grid Grid.Row="2" Margin="28,20">
             <!-- TAB 1: IMPRESSORAS -->
             <Grid x:Name="panelImpressoras" Visibility="Visible">
@@ -330,7 +324,6 @@ $xamlString = @'
                     <ColumnDefinition Width="340"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left: Big IP Editor Card -->
                 <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24" Margin="0,0,18,0">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -352,7 +345,6 @@ $xamlString = @'
                         <TextBlock Grid.Row="1" Text="Digite um endereco IP por linha ou separe por virgula. Linhas iniciadas com '#' serao ignoradas."
                                    FontSize="11.5" Foreground="#64748B" Margin="0,0,0,12"/>
 
-                        <!-- Multiline TextBox for IPs -->
                         <TextBox x:Name="txtIpsBox" Grid.Row="2" Style="{StaticResource ModernTextBox}"
                                  AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas, Cascadia Code, monospace" FontSize="13.5"
                                  TextWrapping="Wrap" Margin="0,0,0,16"/>
@@ -364,7 +356,6 @@ $xamlString = @'
                     </Grid>
                 </Border>
 
-                <!-- Right: Quick Diagnostics Card -->
                 <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24">
                     <StackPanel>
                         <TextBlock Text="Diagnostico de Conectividade" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
@@ -380,7 +371,7 @@ $xamlString = @'
                         <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Padding="16">
                             <StackPanel>
                                 <TextBlock Text="Dica Operacional" FontWeight="Bold" FontSize="12" Foreground="#334155" Margin="0,0,0,4"/>
-                                <TextBlock Text="Se alguma impressora constar como sem resposta, verifique se o cabo de rede esta conectado e se a impressora esta ligada na mesma sub-rede."
+                                <TextBlock Text="Se alguma impressora constar como sem resposta, verifique se o cabo de rede esta conectado e se o protocolo SNMP v1/v2c esta habilitado."
                                            FontSize="11.5" Foreground="#64748B" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
@@ -395,7 +386,6 @@ $xamlString = @'
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Left: Conexao Card -->
                 <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24" Margin="0,0,18,0">
                     <StackPanel>
                         <TextBlock Text="Servidor Central e Identificacao" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
@@ -417,11 +407,10 @@ $xamlString = @'
                     </StackPanel>
                 </Border>
 
-                <!-- Right: SNMP & Disparos Card -->
                 <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="12" Padding="24">
                     <StackPanel>
                         <TextBlock Text="Parametros de Protocolo SNMP" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
-                        <TextBlock Text="Ajustes de comunidade e agendamentos automaticos." FontSize="11.5" Foreground="#64748B" Margin="0,0,0,20"/>
+                        <TextBlock Text="Ajustes de comunidade, agendamentos automaticos e auto-atualizacao." FontSize="11.5" Foreground="#64748B" Margin="0,0,0,20"/>
 
                         <TextBlock Text="Comunidade SNMP (Padrao: public):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtSnmpComm" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
@@ -429,8 +418,11 @@ $xamlString = @'
                         <TextBlock Text="Timeout SNMP em Segundos (Padrao: 2):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                         <TextBox x:Name="txtSnmpTimeout" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="Horarios de Disparo Automatico (separados por virgula):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
-                        <TextBox x:Name="txtHorarios" Style="{StaticResource ModernTextBox}" Margin="0,0,0,20"/>
+                        <TextBlock Text="Horarios de Disparo Automatico (ex: 08:00, 12:00, 16:00, 20:00):" FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
+                        <TextBox x:Name="txtHorarios" Style="{StaticResource ModernTextBox}" Margin="0,0,0,16"/>
+
+                        <CheckBox x:Name="chkAutoUpdate" Content="Manter agente atualizado automaticamente pelo servidor (Auto-Update)"
+                                  FontSize="12" FontWeight="SemiBold" Foreground="#334155" IsChecked="True" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -460,16 +452,17 @@ $xamlString = @'
                         </Border>
 
                         <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Top">
-                            <Button x:Name="btnSvcInstall" Content="Instalar e Iniciar Servico" Style="{StaticResource SuccessBtn}" Padding="24,12" Margin="0,0,14,0"/>
-                            <Button x:Name="btnSvcStop" Content="Parar Servico" Style="{StaticResource ModernBtn}" Padding="20,12" Margin="0,0,14,0"/>
-                            <Button x:Name="btnSvcRemove" Content="Desinstalar Servico" Style="{StaticResource DangerBtn}" Padding="20,12"/>
+                            <Button x:Name="btnSvcInstall" Content="Instalar e Iniciar Servico" Style="{StaticResource SuccessBtn}" Padding="22,12" Margin="0,0,12,0"/>
+                            <Button x:Name="btnSvcStart" Content="Iniciar Servico" Style="{StaticResource PrimaryBtn}" Padding="18,12" Margin="0,0,12,0"/>
+                            <Button x:Name="btnSvcStop" Content="Parar Servico" Style="{StaticResource ModernBtn}" Padding="18,12" Margin="0,0,12,0"/>
+                            <Button x:Name="btnSvcRemove" Content="Desinstalar Servico" Style="{StaticResource DangerBtn}" Padding="18,12"/>
                         </StackPanel>
                     </Grid>
                 </Border>
             </Grid>
         </Grid>
 
-        <!-- CONSOLE / TERMINAL (Professional Dark Slate Dev Console) -->
+        <!-- CONSOLE / TERMINAL -->
         <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="28,12,28,16">
             <Grid>
                 <Grid.RowDefinitions>
@@ -484,7 +477,6 @@ $xamlString = @'
                     <Button x:Name="btnLimparConsole" Content="Limpar Historico" Style="{StaticResource ModernBtn}" DockPanel.Dock="Right" Padding="12,5" FontSize="11"/>
                 </DockPanel>
 
-                <!-- High-contrast developer console -->
                 <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8">
                     <TextBox x:Name="txtConsole" Background="Transparent" Foreground="#38BDF8" BorderThickness="0"
                              FontFamily="Consolas, Cascadia Code, monospace" FontSize="11.5"
@@ -530,10 +522,12 @@ $btnSalvarSrv = $window.FindName("btnSalvarSrv")
 $txtSnmpComm = $window.FindName("txtSnmpComm")
 $txtSnmpTimeout = $window.FindName("txtSnmpTimeout")
 $txtHorarios = $window.FindName("txtHorarios")
+$chkAutoUpdate = $window.FindName("chkAutoUpdate")
 
 $lblSvcDetail = $window.FindName("lblSvcDetail")
 $btnRefreshSvc = $window.FindName("btnRefreshSvc")
 $btnSvcInstall = $window.FindName("btnSvcInstall")
+$btnSvcStart = $window.FindName("btnSvcStart")
 $btnSvcStop = $window.FindName("btnSvcStop")
 $btnSvcRemove = $window.FindName("btnSvcRemove")
 
@@ -546,10 +540,42 @@ $txtSrvBase.Text = [string]$cfg.servidorBase
 $txtApiKey.Text = [string]$cfg.apiKey
 $txtSnmpComm.Text = [string]$cfg.snmpCommunity
 $txtSnmpTimeout.Text = [string]$cfg.snmpTimeoutSec
-$txtHorarios.Text = ($cfg.horariosDisparo -join ", ")
-$txtIpsBox.Text = ($cfg.impressoras -join "`r`n")
+$txtHorarios.Text = (@($cfg.horariosDisparo) -join ", ")
+$txtIpsBox.Text = (@($cfg.impressoras) -join "`r`n")
+$chkAutoUpdate.IsChecked = [bool]$cfg.autoUpdate
 
-# Event Functions
+function Test-IsAdmin {
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+
+function Invoke-ServiceAction([string[]]$subCommands) {
+    if (-not (Test-Path $ExePath)) {
+        Log-Msg "Executavel nao encontrado em: $ExePath" "ERRO"
+        return $false
+    }
+    try {
+        if (Test-IsAdmin) {
+            foreach ($sub in $subCommands) {
+                $p = Start-Process -FilePath $ExePath -ArgumentList "service $sub" -NoNewWindow -PassThru -Wait
+            }
+        } else {
+            Log-Msg "Solicitando elevacao de Administrador (UAC) para gerenciar o servico..." "AVISO"
+            $chained = ($subCommands | ForEach-Object { "& `"$ExePath`" service $_" }) -join "; "
+            $p = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$chained`"" -Verb RunAs -PassThru -Wait
+        }
+        return $true
+    } catch {
+        Log-Msg ("Operacao de servico cancelada ou sem permissao: " + $_.Exception.Message) "ERRO"
+        return $false
+    }
+}
+
 function Log-Msg([string]$msg, [string]$tipo = "INFO") {
     $ts = (Get-Date).ToString("HH:mm:ss")
     $txtConsole.AppendText("[$ts][$tipo] $msg`r`n")
@@ -557,7 +583,7 @@ function Log-Msg([string]$msg, [string]$tipo = "INFO") {
 }
 
 function AtualizarContadorIps {
-    $linhas = $txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
+    $linhas = @($txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
     $c = $linhas.Count
     if ($c -eq 1) {
         $lblIpsCount.Text = "1 impressora cadastrada"
@@ -619,26 +645,33 @@ function AtualizarStatusServico {
 }
 
 function SalvarTudo([bool]$notificar = $true) {
-    $ips = $txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim().TrimStart([char]0xfeff) } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
+    [string[]]$ips = @($txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim().TrimStart([char]0xfeff) } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
     $cfg.unidade = $txtUnidade.Text.Trim()
     $cfg.servidorBase = $txtSrvBase.Text.Trim()
+    if (-not $cfg.endpointIngestao) { $cfg.endpointIngestao = "/api/ingestao/direto" }
     $cfg.apiKey = $txtApiKey.Text.Trim()
-    $cfg.snmpCommunity = $txtSnmpComm.Text.Trim()
-    $cfg.impressoras = @($ips)
+    $cfg.snmpCommunity = if ($txtSnmpComm.Text.Trim()) { $txtSnmpComm.Text.Trim() } else { "public" }
+    $cfg.impressoras = $ips
+    $cfg.autoUpdate = [bool]$chkAutoUpdate.IsChecked
 
     $toNum = 2
-    if ([int]::TryParse($txtSnmpTimeout.Text.Trim(), [ref]$toNum)) { $cfg.snmpTimeoutSec = $toNum }
+    if ([int]::TryParse($txtSnmpTimeout.Text.Trim(), [ref]$toNum) -and $toNum -gt 0) {
+        $cfg.snmpTimeoutSec = $toNum
+    }
 
-    $hrs = $txtHorarios.Text -split "[,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-    if ($hrs.Count -gt 0) { $cfg.horariosDisparo = @($hrs) }
+    $hrs = @($txtHorarios.Text -split "[,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+    if ($hrs.Count -gt 0) { $cfg.horariosDisparo = $hrs }
 
+    # Grava UTF-8 SEM BOM para total compatibilidade com encoding/json do Go
     $jsonContent = $cfg | ConvertTo-Json -Depth 5
-    [System.IO.File]::WriteAllText($cfgPath, $jsonContent, [System.Text.Encoding]::UTF8)
-    [System.IO.File]::WriteAllLines($impPath, $ips, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($cfgPath, $jsonContent, $utf8NoBom)
+
+    $impText = if ($ips.Count -gt 0) { ($ips -join "`r`n") + "`r`n" } else { "" }
+    [System.IO.File]::WriteAllText($impPath, $impText, $utf8NoBom)
 
     $u = [string]$cfg.unidade
     $c = $ips.Count
-    Log-Msg "Configuracoes salvas: Unidade '$u' com $c impressora(s)." "SUCESSO"
+    Log-Msg "Configuracoes salvas (UTF-8 sem BOM): Unidade '$u' com $c impressora(s)." "SUCESSO"
     if ($notificar) {
         [System.Windows.MessageBox]::Show("Configuracoes e lista de impressoras salvas com sucesso!", "Salvo com Sucesso", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
     }
@@ -669,7 +702,7 @@ $btnPingSel.Add_Click({
         }
     }
     if (-not $targetIp -or $targetIp.StartsWith("#")) {
-        $linhas = $txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
+        $linhas = @($txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
         if ($linhas.Count -gt 0) { $targetIp = $linhas[0] }
     }
     if (-not $targetIp) {
@@ -689,12 +722,12 @@ $btnPingSel.Add_Click({
 })
 
 $btnPingAll.Add_Click({
-    $linhas = $txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
+    $linhas = @($txtIpsBox.Text -split "[\r\n,;]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
     if ($linhas.Count -eq 0) {
         Log-Msg "Nenhuma impressora configurada para testar." "AVISO"
         return
     }
-    Log-Msg "Varrendo conectividade de " + $linhas.Count + " impressora(s)..."
+    Log-Msg ("Varrendo conectividade de " + $linhas.Count + " impressora(s)...") "INFO"
     $ok = 0
     foreach ($ip in $linhas) {
         $res = Test-Connection -ComputerName $ip -Count 1 -Quiet -ErrorAction SilentlyContinue
@@ -705,18 +738,27 @@ $btnPingAll.Add_Click({
             Log-Msg "  [OFFLINE] $ip (sem resposta)" "ERRO"
         }
     }
-    Log-Msg "Teste finalizado: $ok de " + $linhas.Count + " impressoras online." "INFO"
+    Log-Msg ("Teste finalizado: $ok de " + $linhas.Count + " impressoras online.") "INFO"
 })
 
 $btnTestSrv.Add_Click({
-    $url = $txtSrvBase.Text.Trim() + "/api/agente/versao"
+    $srvBase = $txtSrvBase.Text.Trim().TrimEnd("/")
+    if (-not $srvBase) {
+        Log-Msg "Informe a URL Base do Painel Central antes de testar." "AVISO"
+        return
+    }
+    if (-not $srvBase.StartsWith("http://") -and -not $srvBase.StartsWith("https://")) {
+        $srvBase = "http://" + $srvBase
+    }
+    $url = $srvBase + "/api/agente/versao"
     Log-Msg "Testando conexao com servidor central em $url..."
     try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $res = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 8 -ErrorAction Stop
-        Log-Msg "Conexao com servidor OK! Versao remota: " + $res.versao "SUCESSO"
+        Log-Msg ("Conexao com servidor OK! Versao remota: " + $res.versao) "SUCESSO"
         [System.Windows.MessageBox]::Show("Conectividade estabelecida com sucesso com o servidor central!`nVersao do servidor: " + $res.versao, "Servidor Conectado", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
     } catch {
-        Log-Msg "Falha ao contatar servidor central: $_" "ERRO"
+        Log-Msg ("Falha ao contatar servidor central: " + $_.Exception.Message) "ERRO"
         [System.Windows.MessageBox]::Show("Nao foi possivel alcancar o servidor em $url.`nVerifique se o painel esta rodando e acessivel.", "Erro de Conexao", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
     }
 })
@@ -731,27 +773,37 @@ $btnFastRun.Add_Click({
 
     $btnFastRun.IsEnabled = $false
     $btnFastRun.Content = "Coletando Contadores..."
+    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
 
     $tempOut = Join-Path $baseDir "exec_temp.log"
     $tempErr = Join-Path $baseDir "exec_err.log"
 
     $proc = Start-Process -FilePath $ExePath -ArgumentList "run" -NoNewWindow -PassThru -RedirectStandardOutput $tempOut -RedirectStandardError $tempErr
-    $proc.WaitForExit(35000)
+    $terminou = $proc.WaitForExit(90000)
+    if (-not $terminou) {
+        try { $proc.Kill() } catch { }
+        Log-Msg "Tempo limite de 90s excedido na coleta imediata. Processo interrompido." "AVISO"
+    }
 
     if (Test-Path $tempOut) {
-        $out = Get-Content $tempOut -Raw -Encoding UTF8
-        if ($out.Trim()) { Log-Msg $out.Trim() "INFO" }
+        $out = Get-Content $tempOut -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($out -and $out.Trim()) { Log-Msg $out.Trim() "INFO" }
         Remove-Item $tempOut -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path $tempErr) {
-        $err = Get-Content $tempErr -Raw -Encoding UTF8
-        if ($err.Trim()) { Log-Msg $err.Trim() "ERRO" }
+        $err = Get-Content $tempErr -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($err -and $err.Trim()) { Log-Msg $err.Trim() "ERRO" }
         Remove-Item $tempErr -Force -ErrorAction SilentlyContinue
     }
 
     $btnFastRun.IsEnabled = $true
     $btnFastRun.Content = "Executar Coleta Agora"
-    Log-Msg "Ciclo de coleta finalizado com codigo de saida: " + $proc.ExitCode "SUCESSO"
+
+    if ($terminou) {
+        $code = $proc.ExitCode
+        $tipoSaida = if ($code -eq 0) { "SUCESSO" } else { "AVISO" }
+        Log-Msg ("Ciclo de coleta finalizado com codigo de saida: " + $code) $tipoSaida
+    }
 })
 
 $btnRefreshSvc.Add_Click({
@@ -761,37 +813,69 @@ $btnRefreshSvc.Add_Click({
 
 $btnSvcInstall.Add_Click({
     SalvarTudo $false
-    Log-Msg "Instalando servico SPXAgentService no Windows..."
-    Start-Process -FilePath $ExePath -ArgumentList "service install" -NoNewWindow -Wait
-    Start-Process -FilePath $ExePath -ArgumentList "service start" -NoNewWindow -Wait
+    Log-Msg "Instalando e iniciando servico SPXAgentService no Windows..."
+    $ok = Invoke-ServiceAction @("install", "start")
+    Start-Sleep -Milliseconds 800
     AtualizarStatusServico
-    Log-Msg "Servico instalado e iniciado com sucesso!" "SUCESSO"
-    [System.Windows.MessageBox]::Show("Servico Windows SPXAgentService instalado e rodando em segundo plano!", "Servico Instalado", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+    $svc = Get-Service -Name "SPXAgentService" -ErrorAction SilentlyContinue
+    if ($ok -and $null -ne $svc -and $svc.Status -eq "Running") {
+        Log-Msg "Servico instalado e iniciado com sucesso!" "SUCESSO"
+        [System.Windows.MessageBox]::Show("Servico Windows SPXAgentService instalado e rodando em segundo plano!", "Servico Ativo", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+    } else {
+        Log-Msg "Nao foi possivel confirmar o servico em execucao. Verifique permissoes de Administrador." "ERRO"
+        [System.Windows.MessageBox]::Show("Nao foi possivel iniciar o servico SPXAgentService.`nConfirme a permissao de Administrador (UAC).", "Falha no Servico", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+    }
+})
+
+$btnSvcStart.Add_Click({
+    SalvarTudo $false
+    Log-Msg "Iniciando servico SPXAgentService..."
+    $ok = Invoke-ServiceAction @("start")
+    Start-Sleep -Milliseconds 800
+    AtualizarStatusServico
+    $svc = Get-Service -Name "SPXAgentService" -ErrorAction SilentlyContinue
+    if ($ok -and $null -ne $svc -and $svc.Status -eq "Running") {
+        Log-Msg "Servico SPXAgentService iniciado com sucesso!" "SUCESSO"
+    } else {
+        Log-Msg "Falha ao iniciar o servico. Caso nao esteja instalado, clique em 'Instalar e Iniciar Servico'." "AVISO"
+    }
 })
 
 $btnSvcStop.Add_Click({
     Log-Msg "Parando servico SPXAgentService..."
-    Start-Process -FilePath $ExePath -ArgumentList "service stop" -NoNewWindow -Wait
+    [void](Invoke-ServiceAction @("stop"))
+    Start-Sleep -Milliseconds 800
     AtualizarStatusServico
-    Log-Msg "Servico parado." "AVISO"
+    $svc = Get-Service -Name "SPXAgentService" -ErrorAction SilentlyContinue
+    if ($null -eq $svc -or $svc.Status -ne "Running") {
+        Log-Msg "Servico parado." "AVISO"
+    } else {
+        Log-Msg "Nao foi possivel parar o servico (verifique permissao de Administrador)." "ERRO"
+    }
 })
 
 $btnSvcRemove.Add_Click({
     $res = [System.Windows.MessageBox]::Show("Tem certeza que deseja desinstalar o servico Windows do agente?", "Confirmar Remocao", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
     if ($res -eq [System.Windows.MessageBoxResult]::Yes) {
         Log-Msg "Removendo servico SPXAgentService..."
-        Start-Process -FilePath $ExePath -ArgumentList "service stop" -NoNewWindow -Wait
-        Start-Process -FilePath $ExePath -ArgumentList "service remove" -NoNewWindow -Wait
+        [void](Invoke-ServiceAction @("stop", "remove"))
+        Start-Sleep -Milliseconds 800
         AtualizarStatusServico
-        Log-Msg "Servico desinstalado do Windows." "AVISO"
+        $svc = Get-Service -Name "SPXAgentService" -ErrorAction SilentlyContinue
+        if ($null -eq $svc) {
+            Log-Msg "Servico desinstalado do Windows." "AVISO"
+        } else {
+            Log-Msg "Nao foi possivel remover o servico (verifique permissao de Administrador)." "ERRO"
+        }
     }
 })
 
 # Inicializacao
-Log-Msg "Assistente SPX Impressoras iniciado em Modo Claro." "INFO"
+Log-Msg "Assistente SPX Impressoras v2.2 iniciado." "INFO"
 $uStr = [string]$cfg.unidade
 $sStr = [string]$cfg.servidorBase
 Log-Msg "Filial ativa: $uStr | Servidor: $sStr" "INFO"
 AtualizarStatusServico
 
 [void]$window.ShowDialog()
+
