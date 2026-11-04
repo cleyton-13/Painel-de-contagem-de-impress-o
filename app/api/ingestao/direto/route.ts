@@ -3,7 +3,8 @@ import Papa from 'papaparse';
 import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { resolveUnit } from '@/lib/business';
+import { resolveUnit, invalidateImpressorasCache } from '@/lib/business';
+import { timingSafeCompare } from '@/lib/auth';
 import { detectColumnMapping, detectCsvSeparator, type ColumnMapping } from '@/lib/csvColumnMapper';
 import { checkRateLimit } from '@/lib/rateLimit';
 import { z } from 'zod';
@@ -11,27 +12,7 @@ import { z } from 'zod';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * ENDPOINT DE PRODUCAO - Ingestao Remota por HTTP
- *
- * A unidade envia os dados diretamente para este endpoint. Dois formatos:
- *
- *  1) multipart/form-data:
- *     - campo: unidade   (ex: "AE_PERUS")
- *     - campo: arquivo   (arquivo CSV no padrao das impressoras)
- *
- *  2) application/json:
- *     { "unidade": "...", "leituras": [ { "ip","serial","modelo","dataHora",
- *       "paginasTotal","paginasPB","paginasColor","status" } ] }
- *
- * REGRA DE REENVIO (mesmo nome de arquivo/linha):
- *  - Se a leitura nao existe -> cria (nova).
- *  - Se existe (mesmo IP+serial+dataHora) e os contadores do reenvio sao
- *    MAIORES que os gravados -> ATUALIZA a leitura existente.
- *  - Se existente e contadores iguais ou menores -> ignorada (duplicada).
- *
- * Seguranca: header "x-api-key" deve bater com INGESTAO_API_KEY (se definida).
- */
+const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 
 interface RemotingResult {
   success: boolean;
@@ -47,10 +28,51 @@ interface RemotingResult {
 }
 
 function validarApiKey(req: Request): boolean {
-  const envKey = process.env.INGESTAO_API_KEY || '';
-  if (!envKey) return true; // sem chave configurada => aceita (nao recomendado em producao)
-  const headerKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  return headerKey === envKey;
+  const envKey = (process.env.INGESTAO_API_KEY || '').trim();
+  if (!envKey) {
+    console.error('[INGESTAO] INGESTAO_API_KEY ausente no ambiente — requisição bloqueada.');
+    return false;
+  }
+  const headerKey = (
+    req.headers.get('x-api-key') ||
+    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+    ''
+  ).trim();
+  if (!headerKey) return false;
+  return timingSafeCompare(headerKey, envKey);
+}
+
+function parseSafeDate(raw: unknown): Date {
+  if (!raw) return new Date();
+  const str = String(raw).trim();
+  if (!str) return new Date();
+
+  // Suporta formato brasileiro DD/MM/YYYY [HH:mm[:ss]]
+  const brMatch = str.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
+  );
+  if (brMatch) {
+    const [, dd, mm, yyyy, hh = '0', min = '0', ss = '0'] = brMatch;
+    const d = new Date(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(hh),
+      Number(min),
+      Number(ss)
+    );
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function computeSafeIpOffset(ip: string): number {
+  if (!ip) return 0;
+  return ip
+    .split(/[.:]/)
+    .reduce((sum, part) => sum + (parseInt(part, 10) || 0), 0);
 }
 
 function novoResult(): RemotingResult {
@@ -75,20 +97,41 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: 'API key invalida.' }, { status: 401 });
   }
 
-  // Rate Limiting (100 requisições por minuto por IP)
-  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
-  const rateLimit = checkRateLimit(`ingestao_${ip}`, 100, 60000);
-  
+  const contentLength = Number(req.headers.get('content-length') || 0);
+  if (contentLength > MAX_PAYLOAD_BYTES) {
+    return NextResponse.json(
+      { success: false, error: 'Payload excede o limite permitido (10 MB).' },
+      { status: 413 }
+    );
+  }
+
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip')?.trim() ||
+    'direct';
+  // Limite generoso para conexões diretas onde várias filiais podem sair pelo mesmo gateway/NAT
+  const rateLimit = checkRateLimit(`ingestao_${ip}`, 300, 60_000);
+
   if (!rateLimit.success) {
-    return NextResponse.json({ success: false, error: 'Muitas requisições (Rate limit exceeded).' }, { status: 429 });
+    return NextResponse.json(
+      { success: false, error: 'Muitas requisições (Rate limit exceeded).' },
+      { status: 429 }
+    );
   }
 
   const contentType = req.headers.get('content-type') || '';
 
   try {
     if (contentType.includes('application/json')) {
-      const body = await req.json();
-      await runarJson(body, result);
+      const rawText = await req.text();
+      if (Buffer.byteLength(rawText, 'utf8') > MAX_PAYLOAD_BYTES) {
+        return NextResponse.json(
+          { success: false, error: 'JSON excede o limite de 10 MB.' },
+          { status: 413 }
+        );
+      }
+      const body = JSON.parse(rawText);
+      await runarJson(body, Buffer.byteLength(rawText, 'utf8'), result);
     } else if (contentType.includes('multipart/form-data')) {
       const form = await req.formData();
       const unidade = String(form.get('unidade') || '').trim();
@@ -96,6 +139,12 @@ export async function POST(req: Request) {
       if (!unidade) throw new Error('Campo "unidade" obrigatorio.');
       if (!file || !(file instanceof File)) {
         throw new Error('Arquivo "arquivo" obrigatorio (multipart).');
+      }
+      if (file.size > MAX_PAYLOAD_BYTES) {
+        return NextResponse.json(
+          { success: false, error: 'Arquivo CSV excede o limite de 10 MB.' },
+          { status: 413 }
+        );
       }
       const content = await file.text();
       const nomeArquivo = file.name || `upload_${Date.now()}.csv`;
@@ -107,6 +156,8 @@ export async function POST(req: Request) {
       );
     }
 
+    invalidateImpressorasCache();
+
     if (result.erros.length > 0) result.success = false;
     return NextResponse.json(result, { status: result.success ? 200 : 400 });
   } catch (error) {
@@ -117,45 +168,57 @@ export async function POST(req: Request) {
   }
 }
 
-// ---------------------------------------------------------------- JSON direto
-const LeituraSchema = z.object({
-  ip: z.string().nullish(),
-  serial: z.string().nullish(),
-  modelo: z.string().nullish(),
-  dataHora: z.string().nullish(),
-  paginasTotal: z.union([z.number(), z.string()]).nullish(),
-  paginasPB: z.union([z.number(), z.string()]).nullish(),
-  paginasColor: z.union([z.number(), z.string()]).nullish(),
-  status: z.string().nullish(),
-}).passthrough();
+const LeituraSchema = z
+  .object({
+    ip: z.string().nullish(),
+    serial: z.string().nullish(),
+    modelo: z.string().nullish(),
+    dataHora: z.string().nullish(),
+    paginasTotal: z.union([z.number(), z.string()]).nullish(),
+    paginasPB: z.union([z.number(), z.string()]).nullish(),
+    paginasColor: z.union([z.number(), z.string()]).nullish(),
+    status: z.string().nullish(),
+  })
+  .passthrough();
 
 const PayloadSchema = z.object({
   unidade: z.string().min(1, 'Campo "unidade" obrigatorio.'),
   leituras: z.array(LeituraSchema).min(1, 'Nenhuma leitura presente em "leituras".'),
 });
 
-async function runarJson(body: unknown, result: RemotingResult) {
+async function runarJson(body: unknown, byteLength: number, result: RemotingResult) {
   if (!body || typeof body !== 'object') throw new Error('JSON invalido.');
-  
-  // Validação segura do payload com Zod
+
   const parsed = PayloadSchema.safeParse(body);
   if (!parsed.success) {
-    const msgs = parsed.error.issues.map(i => i.message).join('; ');
+    const msgs = parsed.error.issues.map((i) => i.message).join('; ');
     throw new Error(`Payload invalido: ${msgs}`);
   }
-  
+
   const unidade = parsed.data.unidade.trim();
   const linhas = parsed.data.leituras;
 
-  const countBefore = await prisma.unidade.count();
+  const existedBefore = await prisma.unidade.findFirst({
+    where: { nomeSanitizado: { equals: unidade.replace(/_/g, ' '), mode: 'insensitive' } },
+    select: { id: true },
+  });
   const unit = await resolveUnit(prisma, unidade);
-  const countAfter = await prisma.unidade.count();
-  if (countAfter > countBefore) { result.unidadeCriada = true; result.novaLinha = true; }
+  if (!existedBefore) {
+    result.unidadeCriada = true;
+    result.novaLinha = true;
+  }
   result.unidade = unit.nome;
+
+  const touchedPrinterIds = new Set<string>();
 
   for (const row of linhas) {
     try {
-      const tipo = await processarLinhaDireta(prisma, row as Record<string, unknown>, unit);
+      const { tipo, impressoraId } = await processarLinhaDireta(
+        prisma,
+        row as Record<string, unknown>,
+        unit
+      );
+      if (impressoraId) touchedPrinterIds.add(impressoraId);
       if (tipo === 'nova') result.newReadings++;
       if (tipo === 'atualizada') result.atualizadas++;
       if (tipo === 'duplicada') result.duplicadas++;
@@ -169,20 +232,26 @@ async function runarJson(body: unknown, result: RemotingResult) {
     }
   }
 
+  // Avalia quebraPorTipo apenas 1 vez por impressora tocada no lote
+  await Promise.all([...touchedPrinterIds].map((id) => checkQuebraPorTipo(prisma, id)));
+
   const temRegistros = result.newReadings + result.atualizadas > 0;
   let statusArquivo = 'PROCESSADO';
   if (!temRegistros) statusArquivo = 'DUPLICADO';
   if (result.erros.length > 0) statusArquivo = 'ERRO';
 
-  const dateStr = new Date().toISOString().split('T')[0];
-  const nomeArquivo = `relatorio_impressoras_${unit.nomeSanitizado}_${dateStr}_${Date.now()}.json`;
+  const now = new Date();
+  const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
+  const nomeArquivo = `relatorio_impressoras_${unit.nomeSanitizado}_${localDateStr}_${Date.now()}.json`;
   result.arquivo = nomeArquivo;
   result.statusArquivo = statusArquivo;
 
   await prisma.arquivoIngerido.create({
     data: {
       nomeArquivo,
-      tamanhoBytes: BigInt(JSON.stringify(body).length),
+      tamanhoBytes: BigInt(byteLength),
       status: statusArquivo,
       erroMensagem: result.erros.length > 0 ? result.erros.join('; ') : null,
       novas: result.newReadings,
@@ -191,11 +260,14 @@ async function runarJson(body: unknown, result: RemotingResult) {
   });
 }
 
-// ---------------------------------------------------------------- CSV (multipart)
-// Parse unico: retorna linhas, headers e sample numa so passada
-function parsearCsvCompleto(content: string): { linhas: Record<string, unknown>[]; headers: string[]; sample: Record<string, unknown>[] } {
-  const separator = detectCsvSeparator(content);
-  const res = Papa.parse<Record<string, unknown>>(content, {
+function parsearCsvCompleto(content: string): {
+  linhas: Record<string, unknown>[];
+  headers: string[];
+  sample: Record<string, unknown>[];
+} {
+  const cleanContent = content.replace(/^\uFEFF/, '');
+  const separator = detectCsvSeparator(cleanContent);
+  const res = Papa.parse<Record<string, unknown>>(cleanContent, {
     header: true,
     skipEmptyLines: true,
     dynamicTyping: true,
@@ -216,16 +288,15 @@ async function runarCsv(unidade: string, nomeArquivo: string, content: string, r
   if (!linhas || linhas.length === 0) throw new Error('CSV vazio ou invalido.');
 
   const mapping = detectColumnMapping(headers, sample);
-
-  const countBefore = await prisma.unidade.count();
   const unit = await resolveUnit(prisma, unidade);
-  const countAfter = await prisma.unidade.count();
-  if (countAfter > countBefore) { result.unidadeCriada = true; result.novaLinha = true; }
   result.unidade = unit.nome;
+
+  const touchedPrinterIds = new Set<string>();
 
   for (const row of linhas) {
     try {
-      const tipo = await processarLinhaCsv(prisma, row, unit, mapping);
+      const { tipo, impressoraId } = await processarLinhaCsv(prisma, row, unit, mapping);
+      if (impressoraId) touchedPrinterIds.add(impressoraId);
       if (tipo === 'nova') result.newReadings++;
       if (tipo === 'atualizada') result.atualizadas++;
       if (tipo === 'duplicada') result.duplicadas++;
@@ -239,12 +310,14 @@ async function runarCsv(unidade: string, nomeArquivo: string, content: string, r
     }
   }
 
+  await Promise.all([...touchedPrinterIds].map((id) => checkQuebraPorTipo(prisma, id)));
+
   const temRegistros = result.newReadings + result.atualizadas > 0;
   let statusArquivo: string;
   if (!temRegistros) {
     statusArquivo = 'DUPLICADO';
     if (!reenvio) {
-      result.erros.push(`Nenhuma leitura nova ou atualizada (arquivo ja existente sem alteracoes).`);
+      result.erros.push('Nenhuma leitura nova ou atualizada (arquivo ja existente sem alteracoes).');
     }
   } else if (reenvio || result.atualizadas > 0) {
     statusArquivo = 'ATUALIZADO';
@@ -254,18 +327,19 @@ async function runarCsv(unidade: string, nomeArquivo: string, content: string, r
   if (result.erros.length > 0) statusArquivo = 'ERRO';
   result.statusArquivo = statusArquivo;
 
+  const byteLen = BigInt(Buffer.byteLength(content, 'utf8'));
   await prisma.arquivoIngerido.upsert({
     where: { nomeArquivo },
     update: {
       status: statusArquivo,
-      tamanhoBytes: BigInt(Buffer.byteLength(content, 'utf-8')),
+      tamanhoBytes: byteLen,
       erroMensagem: result.erros.length > 0 ? result.erros.join('; ') : null,
       novas: result.newReadings,
       atualizadas: result.atualizadas,
     },
     create: {
       nomeArquivo,
-      tamanhoBytes: BigInt(Buffer.byteLength(content, 'utf8')),
+      tamanhoBytes: byteLen,
       status: statusArquivo,
       erroMensagem: result.erros.length > 0 ? result.erros.join('; ') : null,
       novas: result.newReadings,
@@ -274,52 +348,116 @@ async function runarCsv(unidade: string, nomeArquivo: string, content: string, r
   });
 }
 
-// ---------------------------------------------------------------- impressora
+function detectReset(
+  newTotal: number,
+  newPB: number,
+  prevTotal: number,
+  prevPB: number
+): boolean {
+  if (prevPB > 0 && newPB > 0 && newPB < prevPB) return true;
+  if (prevTotal > 0 && newTotal > 0 && newTotal < prevTotal) return true;
+  return false;
+}
+
 async function processarLinhaCsv(
   p: PrismaClient,
   row: Record<string, unknown>,
   unit: Prisma.UnidadeGetPayload<{ include: { aliases: true; perfilFranquia: true } }>,
   mapping: ColumnMapping
-): Promise<'nova' | 'atualizada' | 'duplicada'> {
+): Promise<{ tipo: 'nova' | 'atualizada' | 'duplicada'; impressoraId?: string }> {
   const ip = String(row[mapping.ip] ?? row.IP ?? row.ip ?? '').trim();
   const serial = String(row[mapping.serial] ?? row.Serial ?? row.serial ?? row.SN ?? '').trim();
   const modelo = String(row[mapping.modelo] ?? row.Modelo ?? row.modelo ?? '').trim();
   const dataStr = String(row[mapping.dataHora] ?? row.DataHora ?? row.dataHora ?? row.Data ?? '').trim();
   const status = String(row[mapping.status] ?? row.Status ?? row.status ?? 'Online').trim();
 
-  const paginasTotal = lerNumerico(row, mapping.paginasTotal, ['Paginas_Total', 'PaginasTotal', 'Total', 'paginasTotal']);
+  const paginasTotal = lerNumerico(row, mapping.paginasTotal, [
+    'Paginas_Total',
+    'PaginasTotal',
+    'Total',
+    'paginasTotal',
+  ]);
   const paginasPB = lerNumerico(row, mapping.paginasPB, ['Paginas_PB', 'PaginasPB', 'PB', 'paginasPB']);
-  let paginasColor = lerNumerico(row, mapping.paginasColor, ['Paginas_Color', 'PaginasColor', 'Color', 'paginasColor']);
+  let paginasColor = lerNumerico(row, mapping.paginasColor, [
+    'Paginas_Color',
+    'PaginasColor',
+    'Color',
+    'paginasColor',
+  ]);
 
   const modeloLower = modelo.toLowerCase();
   if (modeloLower.includes('c3300i') && paginasPB > 0 && paginasPB === paginasColor) {
     paginasColor = 0;
   }
 
-  const dataHora = dataStr ? new Date(dataStr) : new Date();
+  const dataHora = parseSafeDate(dataStr);
 
-  // Serial "N/A" -> log isolado
+  // Se serial vier N/A (ex.: impressora offline), tenta associar pela impressora já cadastrada com o mesmo IP na unidade
   if (serial === 'N/A' || !serial) {
-    // Adiciona offset de milissegundos baseado no IP para evitar violacao de constraint unique
-    const ipOffset = ip.split('.').reduce((s, n) => s + parseInt(n, 10), 0);
+    const porIp = ip
+      ? await p.impressora.findFirst({ where: { ip, unidadeId: unit.id } })
+      : null;
+
+    if (porIp) {
+      const ultima = await p.leituraImpressora.findFirst({
+        where: { impressoraId: porIp.id },
+        orderBy: { dataHora: 'desc' },
+      });
+      const ipOffset = computeSafeIpOffset(ip);
+      const uniqueDataHora = new Date(dataHora.getTime() + ipOffset);
+      await p.leituraImpressora.create({
+        data: {
+          ip: ip || porIp.ip,
+          serial: porIp.serial,
+          impressoraId: porIp.id,
+          unidadeId: unit.id,
+          dataHora: uniqueDataHora,
+          paginasTotal: ultima?.paginasTotal ?? 0,
+          paginasPB: ultima?.paginasPB ?? 0,
+          paginasColor: ultima?.paginasColor ?? 0,
+          status: status || 'Offline',
+          resetPlaca: false,
+        },
+      });
+      return { tipo: 'nova', impressoraId: porIp.id };
+    }
+
+    const ipOffset = computeSafeIpOffset(ip);
     const uniqueDataHora = new Date(dataHora.getTime() + ipOffset);
     await p.leituraImpressora.create({
       data: {
-        ip: ip || '0.0.0.0', serial: 'N/A', impressoraId: null, unidadeId: unit.id,
-        dataHora: uniqueDataHora, paginasTotal: 0, paginasPB: 0, paginasColor: 0,
-        status: status || 'Offline', resetPlaca: false,
+        ip: ip || '0.0.0.0',
+        serial: 'N/A',
+        impressoraId: null,
+        unidadeId: unit.id,
+        dataHora: uniqueDataHora,
+        paginasTotal: 0,
+        paginasPB: 0,
+        paginasColor: 0,
+        status: status || 'Offline',
+        resetPlaca: false,
       },
     });
-    return 'nova';
+    return { tipo: 'nova' };
   }
 
   const impressora = await p.impressora.upsert({
     where: { serial },
-    update: { ip, modelo, unidadeId: unit.id },
-    create: { serial, ip, modelo, apelido: null, unidadeId: unit.id, preExistente: true },
+    update: {
+      ip: ip || undefined,
+      modelo: modelo && modelo !== 'Desconhecido' ? modelo : undefined,
+      unidadeId: unit.id,
+    },
+    create: {
+      serial,
+      ip: ip || '0.0.0.0',
+      modelo: modelo || 'Desconhecido',
+      apelido: null,
+      unidadeId: unit.id,
+      preExistente: true,
+    },
   });
 
-  // Regra de reenvio: mesma impressora + mesma dataHora (unique: ip+serial+dataHora)
   const existente = await p.leituraImpressora.findFirst({
     where: { ip: ip || '0.0.0.0', serial, dataHora },
     orderBy: { dataHora: 'desc' },
@@ -329,82 +467,148 @@ async function processarLinhaCsv(
     const novoMaior =
       paginasTotal > existente.paginasTotal ||
       paginasPB > existente.paginasPB ||
-      paginasColor > existente.paginasColor;
+      paginasColor > existente.paginasColor ||
+      (status && status !== existente.status);
     if (!novoMaior) {
-      return 'duplicada'; // contadores iguais ou menores => reenvio sem novidade
+      return { tipo: 'duplicada' };
     }
-    const resetPlaca = paginasPB < existente.paginasPB;
+    const resetPlaca = detectReset(
+      paginasTotal,
+      paginasPB,
+      existente.paginasTotal,
+      existente.paginasPB
+    );
     await p.leituraImpressora.update({
       where: { id: existente.id },
       data: {
-        paginasTotal, paginasPB, paginasColor,
-        status: status || 'Online', resetPlaca,
-        ip, impressoraId: impressora.id,
+        paginasTotal: paginasTotal || existente.paginasTotal,
+        paginasPB: paginasPB || existente.paginasPB,
+        paginasColor: paginasColor || existente.paginasColor,
+        status: status || 'Online',
+        resetPlaca,
+        ip: ip || existente.ip,
+        impressoraId: impressora.id,
       },
     });
-    await checkQuebraPorTipo(p, impressora.id);
-    return 'atualizada';
+    return { tipo: 'atualizada', impressoraId: impressora.id };
   }
 
-  let resetPlaca = false;
   const ultima = await p.leituraImpressora.findFirst({
-    where: { serial, unidadeId: unit.id },
+    where: { impressoraId: impressora.id },
     orderBy: { dataHora: 'desc' },
   });
-  if (ultima && paginasPB < ultima.paginasPB) resetPlaca = true;
+
+  // Se estiver Offline com contadores zerados, preserva último odômetro conhecido para não gerar falso resetPlaca
+  const isOfflineZero =
+    status.toLowerCase() !== 'online' && paginasTotal === 0 && paginasPB === 0 && paginasColor === 0;
+  const effTotal = isOfflineZero && ultima ? ultima.paginasTotal : paginasTotal;
+  const effPB = isOfflineZero && ultima ? ultima.paginasPB : paginasPB;
+  const effCol = isOfflineZero && ultima ? ultima.paginasColor : paginasColor;
+
+  const resetPlaca = ultima
+    ? detectReset(effTotal, effPB, ultima.paginasTotal, ultima.paginasPB)
+    : false;
 
   await p.leituraImpressora.create({
     data: {
-      dataHora, paginasTotal, paginasPB, paginasColor, status: status || 'Online',
-      resetPlaca, ip, serial, impressoraId: impressora.id, unidadeId: unit.id,
+      dataHora,
+      paginasTotal: effTotal,
+      paginasPB: effPB,
+      paginasColor: effCol,
+      status: status || 'Online',
+      resetPlaca,
+      ip: ip || '0.0.0.0',
+      serial,
+      impressoraId: impressora.id,
+      unidadeId: unit.id,
     },
   });
 
-  await checkQuebraPorTipo(p, impressora.id);
-  return 'nova';
+  return { tipo: 'nova', impressoraId: impressora.id };
 }
 
-// Processamento de uma leitura que chega pronta em JSON
 async function processarLinhaDireta(
   p: PrismaClient,
   row: Record<string, unknown>,
   unit: Prisma.UnidadeGetPayload<{ include: { aliases: true; perfilFranquia: true } }>
-): Promise<'nova' | 'atualizada' | 'duplicada'> {
+): Promise<{ tipo: 'nova' | 'atualizada' | 'duplicada'; impressoraId?: string }> {
   const ip = String(row.ip ?? row.IP ?? '').trim();
   const serial = String(row.serial ?? row.Serial ?? row.SN ?? '').trim();
   const modelo = String(row.modelo ?? '').trim();
-  const dataHora = row.dataHora ? new Date(String(row.dataHora)) : new Date();
+  const dataHora = parseSafeDate(row.dataHora);
   const status = String(row.status ?? 'Online').trim();
-  let total = Number(row.paginasTotal ?? row.total ?? 0);
-  let pb = Number(row.paginasPB ?? row.pb ?? 0);
-  let color = Number(row.paginasColor ?? row.color ?? 0);
-  if (isNaN(total)) total = 0;
-  if (isNaN(pb)) pb = 0;
-  if (isNaN(color)) color = 0;
+  let total = Math.max(0, Number(row.paginasTotal ?? row.total ?? 0) || 0);
+  let pb = Math.max(0, Number(row.paginasPB ?? row.pb ?? 0) || 0);
+  let color = Math.max(0, Number(row.paginasColor ?? row.color ?? 0) || 0);
 
-  // Regra c3300i: PB e Color iguais indica leitura espelhada (nao e realmente color)
   const modeloLower = modelo.toLowerCase();
   if (modeloLower.includes('c3300i') && pb > 0 && pb === color) {
     color = 0;
   }
 
   if (serial === 'N/A' || !serial) {
-    const ipOffset = ip.split('.').reduce((s: number, n: string) => s + parseInt(n, 10), 0);
+    const porIp = ip
+      ? await p.impressora.findFirst({ where: { ip, unidadeId: unit.id } })
+      : null;
+
+    if (porIp) {
+      const ultima = await p.leituraImpressora.findFirst({
+        where: { impressoraId: porIp.id },
+        orderBy: { dataHora: 'desc' },
+      });
+      const ipOffset = computeSafeIpOffset(ip);
+      const uniqueDataHora = new Date(dataHora.getTime() + ipOffset);
+      await p.leituraImpressora.create({
+        data: {
+          ip: ip || porIp.ip,
+          serial: porIp.serial,
+          impressoraId: porIp.id,
+          unidadeId: unit.id,
+          dataHora: uniqueDataHora,
+          paginasTotal: ultima?.paginasTotal ?? 0,
+          paginasPB: ultima?.paginasPB ?? 0,
+          paginasColor: ultima?.paginasColor ?? 0,
+          status: status || 'Offline',
+          resetPlaca: false,
+        },
+      });
+      return { tipo: 'nova', impressoraId: porIp.id };
+    }
+
+    const ipOffset = computeSafeIpOffset(ip);
     const uniqueDataHora = new Date(dataHora.getTime() + ipOffset);
     await p.leituraImpressora.create({
       data: {
-        ip: ip || '0.0.0.0', serial: 'N/A', impressoraId: null, unidadeId: unit.id,
-        dataHora: uniqueDataHora, paginasTotal: 0, paginasPB: 0, paginasColor: 0,
-        status: status || 'Offline', resetPlaca: false,
+        ip: ip || '0.0.0.0',
+        serial: 'N/A',
+        impressoraId: null,
+        unidadeId: unit.id,
+        dataHora: uniqueDataHora,
+        paginasTotal: 0,
+        paginasPB: 0,
+        paginasColor: 0,
+        status: status || 'Offline',
+        resetPlaca: false,
       },
     });
-    return 'nova';
+    return { tipo: 'nova' };
   }
 
   const impressora = await p.impressora.upsert({
     where: { serial },
-    update: { ip, modelo, unidadeId: unit.id },
-    create: { serial, ip, modelo, apelido: null, unidadeId: unit.id, preExistente: true },
+    update: {
+      ip: ip || undefined,
+      modelo: modelo && modelo !== 'Desconhecido' ? modelo : undefined,
+      unidadeId: unit.id,
+    },
+    create: {
+      serial,
+      ip: ip || '0.0.0.0',
+      modelo: modelo || 'Desconhecido',
+      apelido: null,
+      unidadeId: unit.id,
+      preExistente: true,
+    },
   });
 
   const existente = await p.leituraImpressora.findFirst({
@@ -416,65 +620,89 @@ async function processarLinhaDireta(
     const novoMaior =
       total > existente.paginasTotal ||
       pb > existente.paginasPB ||
-      color > existente.paginasColor;
-    if (!novoMaior) return 'duplicada';
-    const resetPlaca = pb < existente.paginasPB;
+      color > existente.paginasColor ||
+      (status && status !== existente.status);
+    if (!novoMaior) return { tipo: 'duplicada' };
+
+    const resetPlaca = detectReset(total, pb, existente.paginasTotal, existente.paginasPB);
     await p.leituraImpressora.update({
       where: { id: existente.id },
       data: {
-        paginasTotal: total, paginasPB: pb, paginasColor: color,
-        status: status || 'Online', resetPlaca, ip,
+        paginasTotal: total || existente.paginasTotal,
+        paginasPB: pb || existente.paginasPB,
+        paginasColor: color || existente.paginasColor,
+        status: status || 'Online',
+        resetPlaca,
+        ip: ip || existente.ip,
         impressoraId: impressora.id,
       },
     });
-    await checkQuebraPorTipo(p, impressora.id);
-    return 'atualizada';
+    return { tipo: 'atualizada', impressoraId: impressora.id };
   }
 
   const ultima = await p.leituraImpressora.findFirst({
-    where: { serial, unidadeId: unit.id },
+    where: { impressoraId: impressora.id },
     orderBy: { dataHora: 'desc' },
   });
-  const resetPlaca = !!(ultima && pb < ultima.paginasPB);
+
+  const isOfflineZero =
+    status.toLowerCase() !== 'online' && total === 0 && pb === 0 && color === 0;
+  if (isOfflineZero && ultima) {
+    total = ultima.paginasTotal;
+    pb = ultima.paginasPB;
+    color = ultima.paginasColor;
+  }
+
+  const resetPlaca = ultima
+    ? detectReset(total, pb, ultima.paginasTotal, ultima.paginasPB)
+    : false;
 
   await p.leituraImpressora.create({
     data: {
-      dataHora, paginasTotal: total, paginasPB: pb, paginasColor: color,
-      status: status || 'Online', resetPlaca, ip, serial,
-      impressoraId: impressora.id, unidadeId: unit.id,
+      dataHora,
+      paginasTotal: total,
+      paginasPB: pb,
+      paginasColor: color,
+      status: status || 'Online',
+      resetPlaca,
+      ip: ip || '0.0.0.0',
+      serial,
+      impressoraId: impressora.id,
+      unidadeId: unit.id,
     },
   });
 
-  await checkQuebraPorTipo(p, impressora.id);
-  return 'nova';
+  return { tipo: 'nova', impressoraId: impressora.id };
 }
 
 async function checkQuebraPorTipo(p: PrismaClient, impressoraId: string) {
   const N = 3;
   const recent = await p.leituraImpressora.findMany({
-    where: { impressoraId },
+    where: { impressoraId, status: 'Online' },
     orderBy: { dataHora: 'desc' },
     take: N,
     select: { paginasPB: true, paginasColor: true, paginasTotal: true },
   });
   if (recent.length < N) return;
-  const pbTravado = new Set(recent.map(r => r.paginasPB)).size === 1;
-  const colTravado = new Set(recent.map(r => r.paginasColor)).size === 1;
-  const totalAvancou = new Set(recent.map(r => r.paginasTotal)).size > 1;
+  const pbTravado = new Set(recent.map((r) => r.paginasPB)).size === 1;
+  const colTravado = new Set(recent.map((r) => r.paginasColor)).size === 1;
+  const totalAvancou = new Set(recent.map((r) => r.paginasTotal)).size > 1;
+  const indisponivel = pbTravado && colTravado && totalAvancou;
+
   await p.impressora.update({
     where: { id: impressoraId },
-    data: { quebraPorTipoIndisponivel: pbTravado && colTravado && totalAvancou },
+    data: { quebraPorTipoIndisponivel: indisponivel },
   });
 }
 
 function lerNumerico(row: Record<string, unknown>, mapa: string, fallbacks: string[]): number {
   if (mapa) {
     const v = Number(row[mapa]);
-    if (!isNaN(v)) return v;
+    if (!Number.isNaN(v)) return Math.max(0, v);
   }
   for (const fb of fallbacks) {
     const v = Number(row[fb]);
-    if (!isNaN(v)) return v;
+    if (!Number.isNaN(v)) return Math.max(0, v);
   }
   return 0;
 }

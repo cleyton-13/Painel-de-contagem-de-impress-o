@@ -2,9 +2,12 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -22,11 +25,11 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Unidade:          "AE_PERUS",
-		ServidorBase:     "http://localhost:3001",
+		Unidade:          "Matriz",
+		ServidorBase:     "http://localhost:3000",
 		EndpointIngestao: "/api/ingestao/direto",
-		ApiKey:           "homolog_dev_key_2026",
-		Impressoras:      []string{"127.0.0.1"},
+		ApiKey:           "",
+		Impressoras:      []string{},
 		SNMPCommunity:    "public",
 		SNMPTimeoutSec:   2,
 		HorariosDisparo:  []string{"08:00", "12:00", "16:00", "20:00"},
@@ -42,81 +45,143 @@ func GetConfigPath() string {
 	return filepath.Join(filepath.Dir(exePath), "config.json")
 }
 
+// NormalizarHorario converte "8:00" ou "8:5" em "08:00" / "08:05"
+func NormalizarHorario(raw string) (string, bool) {
+	clean := strings.TrimSpace(raw)
+	parts := strings.Split(clean, ":")
+	if len(parts) < 2 {
+		return "", false
+	}
+	h, errH := strconv.Atoi(strings.TrimSpace(parts[0]))
+	m, errM := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errH != nil || errM != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return "", false
+	}
+	return fmt.Sprintf("%02d:%02d", h, m), true
+}
+
+func normalizarListaHorarios(horarios []string) []string {
+	seen := make(map[string]bool)
+	var norm []string
+	for _, h := range horarios {
+		if hhmm, ok := NormalizarHorario(h); ok && !seen[hhmm] {
+			seen[hhmm] = true
+			norm = append(norm, hhmm)
+		}
+	}
+	if len(norm) == 0 {
+		return []string{"08:00", "12:00", "16:00", "20:00"}
+	}
+	return norm
+}
+
 func LoadConfig() (*Config, error) {
 	cfgPath := GetConfigPath()
 	baseDir := filepath.Dir(cfgPath)
 
 	cfg := DefaultConfig()
 
-	// 1. Tenta carregar config.json existente
+	// 1. Tenta carregar config.json existente (removendo eventual UTF-8 BOM do PowerShell 5.1)
 	data, err := os.ReadFile(cfgPath)
-	if err == nil && len(data) > 0 {
-		if err := json.Unmarshal(data, cfg); err == nil {
-			// Se impressoras.txt tiver conteudo valido, sincroniza
-			txtIps := loadImpressorasTxt(filepath.Join(baseDir, "impressoras.txt"))
-			if len(txtIps) > 0 {
+	if err == nil {
+		cleanData := bytes.TrimSpace(bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}))
+		if len(cleanData) > 0 {
+			if unmarshalErr := json.Unmarshal(cleanData, cfg); unmarshalErr != nil {
+				// NUNCA sobrescreve um config.json existente caso esteja com erro de sintaxe
+				return nil, fmt.Errorf("erro lendo %s: %w", cfgPath, unmarshalErr)
+			}
+
+			cfg.HorariosDisparo = normalizarListaHorarios(cfg.HorariosDisparo)
+			if cfg.EndpointIngestao == "" {
+				cfg.EndpointIngestao = "/api/ingestao/direto"
+			}
+			if cfg.SNMPCommunity == "" {
+				cfg.SNMPCommunity = "public"
+			}
+			if cfg.SNMPTimeoutSec <= 0 {
+				cfg.SNMPTimeoutSec = 2
+			}
+
+			// Se impressoras.txt existir, sincroniza lista de IPs (incluindo quando esvaziada)
+			impTxtPath := filepath.Join(baseDir, "impressoras.txt")
+			if txtIps, exists := loadImpressorasTxt(impTxtPath); exists {
 				cfg.Impressoras = txtIps
 			}
 			return cfg, nil
 		}
 	}
 
-	// 2. Se nao encontrou, tenta migrar de config.local.ps1
+	// 2. Se config.json nao existia, tenta migrar de config.local.ps1
 	ps1Path := filepath.Join(baseDir, "config.local.ps1")
 	if ps1Data, err := os.ReadFile(ps1Path); err == nil {
-		parsePs1Config(string(ps1Data), cfg)
+		parsePs1Config(string(bytes.TrimPrefix(ps1Data, []byte{0xEF, 0xBB, 0xBF})), cfg)
 	}
 
-	ips := loadImpressorasTxt(filepath.Join(baseDir, "impressoras.txt"))
-	if len(ips) > 0 {
+	if ips, exists := loadImpressorasTxt(filepath.Join(baseDir, "impressoras.txt")); exists {
 		cfg.Impressoras = ips
 	}
+	cfg.HorariosDisparo = normalizarListaHorarios(cfg.HorariosDisparo)
 
-	// Salva apenas se o arquivo nao existia
+	// Salva apenas na criacao inicial quando o arquivo nao existia
 	_ = SaveConfig(cfg)
 	return cfg, nil
 }
 
 func SaveConfig(cfg *Config) error {
+	cfg.HorariosDisparo = normalizarListaHorarios(cfg.HorariosDisparo)
+	if cfg.EndpointIngestao == "" {
+		cfg.EndpointIngestao = "/api/ingestao/direto"
+	}
+
+	var lines []string
+	seenIPs := make(map[string]bool)
+	for _, ip := range cfg.Impressoras {
+		ip = strings.TrimSpace(strings.TrimPrefix(ip, "\ufeff"))
+		if ip != "" && !strings.HasPrefix(ip, "#") && !seenIPs[ip] {
+			seenIPs[ip] = true
+			lines = append(lines, ip)
+		}
+	}
+	cfg.Impressoras = lines
+
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	cfgErr := os.WriteFile(GetConfigPath(), data, 0644)
 
-	// Sincroniza tambem o impressoras.txt
+	// Sincroniza tambem o impressoras.txt sem BOM
 	baseDir := filepath.Dir(GetConfigPath())
 	impPath := filepath.Join(baseDir, "impressoras.txt")
-	var lines []string
-	for _, ip := range cfg.Impressoras {
-		ip = strings.TrimSpace(ip)
-		if ip != "" {
-			lines = append(lines, ip)
-		}
+	impContent := ""
+	if len(lines) > 0 {
+		impContent = strings.Join(lines, "\r\n") + "\r\n"
 	}
-	_ = os.WriteFile(impPath, []byte(strings.Join(lines, "\r\n")+"\r\n"), 0644)
+	_ = os.WriteFile(impPath, []byte(impContent), 0644)
 
 	return cfgErr
 }
 
-func loadImpressorasTxt(path string) []string {
+func loadImpressorasTxt(path string) ([]string, bool) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	defer f.Close()
 
-	var ips []string
+	ips := []string{}
+	seen := make(map[string]bool)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		line = strings.TrimPrefix(line, "\ufeff")
 		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "#") {
+		if line != "" && !strings.HasPrefix(line, "#") && !seen[line] {
+			seen[line] = true
 			ips = append(ips, line)
 		}
 	}
-	return ips
+	return ips, true
 }
 
 func parsePs1Config(content string, cfg *Config) {

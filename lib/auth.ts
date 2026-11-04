@@ -1,16 +1,30 @@
-﻿import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import crypto from 'crypto';
 
 const COOKIE_NAME = 'spx_auth_token';
-const DEFAULT_SECRET = 'spx_seguranca_chave_mestra_dashboard_2026_bi';
 
-function getSecretKey() {
-  const secret = process.env.ADMIN_JWT_SECRET || process.env.INGESTAO_API_KEY || DEFAULT_SECRET;
-  return new TextEncoder().encode(secret.padEnd(32, '#'));
+// Segredo efêmero por processo caso ADMIN_JWT_SECRET não esteja configurado no ambiente.
+// Jamais reutiliza INGESTAO_API_KEY nem uma constante estática previsível.
+const EPHEMERAL_FALLBACK_SECRET = crypto.randomBytes(32).toString('hex');
+let warnedMissingSecret = false;
+
+export function getJwtSecretBytes(): Uint8Array {
+  const configured = process.env.ADMIN_JWT_SECRET?.trim();
+  if (configured && configured.length >= 16) {
+    return new TextEncoder().encode(configured.padEnd(32, '#'));
+  }
+  if (!warnedMissingSecret) {
+    warnedMissingSecret = true;
+    console.warn(
+      '[AUTH] Aviso: ADMIN_JWT_SECRET não definido (ou < 16 chars). Usando segredo efêmero em memória — defina ADMIN_JWT_SECRET no .env.local.'
+    );
+  }
+  return new TextEncoder().encode(EPHEMERAL_FALLBACK_SECRET);
 }
 
 export async function createSessionToken(role: string = 'admin'): Promise<string> {
-  const secret = getSecretKey();
+  const secret = getJwtSecretBytes();
   return await new SignJWT({ role })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -20,7 +34,7 @@ export async function createSessionToken(role: string = 'admin'): Promise<string
 
 export async function verifySessionToken(token: string): Promise<{ valid: boolean; role?: string }> {
   try {
-    const secret = getSecretKey();
+    const secret = getJwtSecretBytes();
     const { payload } = await jwtVerify(token, secret);
     return { valid: true, role: String(payload.role || 'admin') };
   } catch {
@@ -40,9 +54,33 @@ export async function isAuthenticated(): Promise<boolean> {
   }
 }
 
+export function timingSafeCompare(a: string, b: string): boolean {
+  const hashA = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const hashB = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
+
 export function validateAdminPassword(inputPassword: string): boolean {
-  const configuredPassword = process.env.PAINEL_ADMIN_PASSWORD || 'spx@2026';
-  return inputPassword === configuredPassword;
+  const configuredPassword = process.env.PAINEL_ADMIN_PASSWORD?.trim();
+  if (!configuredPassword) {
+    console.error('[AUTH] PAINEL_ADMIN_PASSWORD não configurada no ambiente. Login bloqueado.');
+    return false;
+  }
+  if (!inputPassword) return false;
+  return timingSafeCompare(inputPassword, configuredPassword);
+}
+
+export function shouldUseSecureCookie(req?: Request): boolean {
+  if (process.env.FORCE_SECURE_COOKIE === 'true') return true;
+  if (process.env.FORCE_SECURE_COOKIE === 'false') return false;
+  if (!req) return false;
+  const proto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  if (proto) return proto === 'https';
+  try {
+    return new URL(req.url).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export { COOKIE_NAME };

@@ -1,35 +1,42 @@
-// Um rate limiter simples em memória.
-// Em produção com múltiplas instâncias, idealmente usaríamos Redis.
-// Como estamos em um servidor único (Next.js Node server), o Map em memória funciona perfeitamente.
+// Rate limiter em memória com proteção contra crescimento ilimitado (DoS de chaves).
+type RateLimitRecord = { count: number; resetTime: number };
+type RateLimitStore = Map<string, RateLimitRecord>;
 
-type RateLimitStore = Map<string, { count: number; resetTime: number }>;
-
+const MAX_STORE_SIZE = 5000;
 const store: RateLimitStore = new Map();
+
+function pruneStore(now: number) {
+  if (store.size < MAX_STORE_SIZE) return;
+  for (const [key, val] of store.entries()) {
+    if (val.resetTime <= now) store.delete(key);
+  }
+  // Se ainda estiver cheio, remove as entradas mais antigas na ordem de inserção do Map
+  if (store.size >= MAX_STORE_SIZE) {
+    const excess = store.size - MAX_STORE_SIZE + 1;
+    let removed = 0;
+    for (const key of store.keys()) {
+      store.delete(key);
+      removed += 1;
+      if (removed >= excess) break;
+    }
+  }
+}
 
 export function checkRateLimit(
   identifier: string,
-  limit: number = 60, // máximo de requisições
-  windowMs: number = 60000 // janela de tempo (ex: 1 minuto)
+  limit: number = 60,
+  windowMs: number = 60000
 ): { success: boolean; limit: number; remaining: number; resetTime: number } {
   const now = Date.now();
   const record = store.get(identifier);
 
-  // Se não existe ou expirou a janela, cria um novo
-  if (!record || record.resetTime < now) {
+  if (!record || record.resetTime <= now) {
+    pruneStore(now);
     const newResetTime = now + windowMs;
     store.set(identifier, { count: 1, resetTime: newResetTime });
-    
-    // Limpeza de cache antiga (garbage collection passiva)
-    if (store.size > 1000) {
-       for (const [key, val] of store.entries()) {
-           if (val.resetTime < now) store.delete(key);
-       }
-    }
-
-    return { success: true, limit, remaining: limit - 1, resetTime: newResetTime };
+    return { success: true, limit, remaining: Math.max(0, limit - 1), resetTime: newResetTime };
   }
 
-  // Se existe na janela atual, incrementa e verifica
   record.count += 1;
   const remaining = Math.max(0, limit - record.count);
 
@@ -37,6 +44,13 @@ export function checkRateLimit(
     success: record.count <= limit,
     limit,
     remaining,
-    resetTime: record.resetTime
+    resetTime: record.resetTime,
   };
+}
+
+export function getClientIdentifier(req: Request, prefix: string): string {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const realIp = req.headers.get('x-real-ip')?.trim();
+  const ip = forwarded || realIp || 'local';
+  return `${prefix}:${ip.slice(0, 64)}`;
 }

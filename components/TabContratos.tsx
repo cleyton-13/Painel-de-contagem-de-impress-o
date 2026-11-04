@@ -19,7 +19,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
   onSaveContrato,
   onAssignContrato,
   onMergeUnidades,
-  onDeleteUnidade
+  onDeleteUnidade,
 }) => {
   // Merge modal state
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
@@ -36,6 +36,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
   // Safety popup for tariff > 1.50
   const [isSafetyModalOpen, setIsSafetyModalOpen] = useState(false);
   const [pendingContratoForm, setPendingContratoForm] = useState<Partial<PerfilFranquia> | null>(null);
+  const [safetyReason, setSafetyReason] = useState<string>('');
 
   // Contract form state
   const [formNome, setFormNome] = useState('');
@@ -49,6 +50,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
   const [formExcedenteColor, setFormExcedenteColor] = useState(0.30);
   const [formPrecoResma, setFormPrecoResma] = useState(28.0);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const startEditContrato = (c: PerfilFranquia) => {
     setEditingId(c.id);
@@ -80,6 +82,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     const draft: Partial<PerfilFranquia> = {
       id: editingId || undefined,
@@ -92,27 +95,44 @@ export const TabContratos: React.FC<TabContratosProps> = ({
       cotaColor: formTemFixa ? Number(formCotaColor) : 0,
       excedentePB: formTemFixa ? parseFloat(Number(formExcedentePB).toFixed(4)) : 0,
       excedenteColor: formTemFixa ? parseFloat(Number(formExcedenteColor).toFixed(4)) : 0,
-      precoResmaPapel: parseFloat(Number(formPrecoResma).toFixed(2))
+      precoResmaPapel: parseFloat(Number(formPrecoResma).toFixed(2)),
     };
 
-    // Check Safety Validation Rule: Tariff > R$ 1,50
-    if (draft.tarifaAvulsaPB! > 1.50 || draft.tarifaAvulsaColor! > 1.50 || (draft.excedentePB && draft.excedentePB > 1.50) || (draft.excedenteColor && draft.excedenteColor > 1.50)) {
+    // Check Safety Validation Rule: Tarifa unitária > R$ 1,50
+    const highTariffs: string[] = [];
+    if (draft.tarifaAvulsaPB && draft.tarifaAvulsaPB > 1.50) highTariffs.push(`Tarifa Avulsa P&B (R$ ${draft.tarifaAvulsaPB.toFixed(2)})`);
+    if (draft.tarifaAvulsaColor && draft.tarifaAvulsaColor > 1.50) highTariffs.push(`Tarifa Avulsa Color (R$ ${draft.tarifaAvulsaColor.toFixed(2)})`);
+    if (draft.excedentePB && draft.excedentePB > 1.50) highTariffs.push(`Excedente P&B (R$ ${draft.excedentePB.toFixed(2)})`);
+    if (draft.excedenteColor && draft.excedenteColor > 1.50) highTariffs.push(`Excedente Color (R$ ${draft.excedenteColor.toFixed(2)})`);
+
+    if (highTariffs.length > 0) {
+      setSafetyReason(highTariffs.join(', '));
       setPendingContratoForm(draft);
       setIsSafetyModalOpen(true);
       return;
     }
 
-    await onSaveContrato(draft);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      await onSaveContrato(draft);
+      resetForm();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const confirmSafetySave = async () => {
     if (pendingContratoForm) {
-      await onSaveContrato(pendingContratoForm);
-      setPendingContratoForm(null);
+      setIsSubmitting(true);
+      try {
+        await onSaveContrato(pendingContratoForm);
+        setPendingContratoForm(null);
+        resetForm();
+      } finally {
+        setIsSubmitting(false);
+      }
     }
     setIsSafetyModalOpen(false);
-    resetForm();
   };
 
   const handleExecuteMerge = async () => {
@@ -137,7 +157,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
   const handleExecuteDelete = async () => {
     if (!deleteTarget) return;
     if (deleteConfirmNome.trim() !== deleteTarget.nome) {
-      setDeleteMessage({ type: 'error', text: 'O nome digitado nao confere com a unidade selecionada.' });
+      setDeleteMessage({ type: 'error', text: 'O nome digitado não confere com a unidade selecionada.' });
       return;
     }
     setIsDeleting(true);
@@ -164,12 +184,15 @@ export const TabContratos: React.FC<TabContratosProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      
       {/* Top Banner with Merge Tool trigger */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide">Gestão de Franquias & Ferramenta de Fusão</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-300">Configure perfis de tarifa e unifique filiais duplicadas</p>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide">
+            Gestão de Franquias & Ferramenta de Fusão
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-300">
+            Configure perfis tarifários e unifique filiais duplicadas com alias automático
+          </p>
         </div>
         <button
           onClick={() => setIsMergeModalOpen(true)}
@@ -181,18 +204,22 @@ export const TabContratos: React.FC<TabContratosProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Existing Contracts Grid (2 cols) */}
         <div className="lg:col-span-2 space-y-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-300">Perfis de Franquia Cadastrados</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-300">
+            Perfis de Franquia Cadastrados
+          </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {contratos.map(c => (
-              <div key={c.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-lg space-y-3 relative group">
+            {contratos.map((c) => (
+              <div
+                key={c.id}
+                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-lg space-y-3 relative group"
+              >
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white">{c.nome}</h4>
                   <button
                     onClick={() => startEditContrato(c)}
-                    className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-cyan-700 dark:text-cyan-300 rounded text-xs font-semibold cursor-pointer"
+                    className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-cyan-700 dark:text-cyan-300 rounded text-xs font-semibold cursor-pointer"
                   >
                     Editar
                   </button>
@@ -200,35 +227,46 @@ export const TabContratos: React.FC<TabContratosProps> = ({
 
                 <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-300">Tarifa Avulsa P&B:</span>
-                    <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">R$ {c.tarifaAvulsaPB.toFixed(4)} /pág</span>
+                    <span className="text-slate-500 dark:text-slate-400">Tarifa Avulsa P&B:</span>
+                    <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">
+                      R$ {c.tarifaAvulsaPB.toFixed(4)} /pág
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600 dark:text-slate-300">Tarifa Avulsa Color:</span>
-                    <span className="font-mono text-pink-600 dark:text-pink-400 font-bold">R$ {c.tarifaAvulsaColor.toFixed(4)} /pág</span>
+                    <span className="text-slate-500 dark:text-slate-400">Tarifa Avulsa Color:</span>
+                    <span className="font-mono text-pink-600 dark:text-pink-400 font-bold">
+                      R$ {c.tarifaAvulsaColor.toFixed(4)} /pág
+                    </span>
                   </div>
                   {c.temFranquiaFixa && (
                     <>
                       <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
-                        <span className="text-slate-600 dark:text-slate-300">Valor Fixo Mensal:</span>
-                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">R$ {(c.valorFixoMensal || 0).toFixed(2)}</span>
+                        <span className="text-slate-500 dark:text-slate-400">Valor Fixo Mensal:</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                          R$ {(c.valorFixoMensal || 0).toFixed(2)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-300">Cota Inclusa P&B / Color:</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-200">{c.cotaPB} / {c.cotaColor} pág</span>
+                        <span className="text-slate-500 dark:text-slate-400">Cota Inclusa P&B / Color:</span>
+                        <span className="font-mono text-slate-800 dark:text-slate-200">
+                          {c.cotaPB?.toLocaleString('pt-BR')} / {c.cotaColor?.toLocaleString('pt-BR')} pág.
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-600 dark:text-slate-300">Excedente P&B / Color:</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-300">R$ {c.excedentePB} / R$ {c.excedenteColor}</span>
+                        <span className="text-slate-500 dark:text-slate-400">Excedente P&B / Color:</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                          R$ {c.excedentePB?.toFixed(4)} / R$ {c.excedenteColor?.toFixed(4)}
+                        </span>
                       </div>
                     </>
                   )}
                   <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
-                    <span className="text-slate-600 dark:text-slate-300">Resma de Papel (500fl):</span>
-                    <span className="font-mono text-amber-600 dark:text-amber-300">R$ {c.precoResmaPapel.toFixed(2)}</span>
+                    <span className="text-slate-500 dark:text-slate-400">Resma de Papel (500fl):</span>
+                    <span className="font-mono text-amber-600 dark:text-amber-400">
+                      R$ {c.precoResmaPapel.toFixed(2)}
+                    </span>
                   </div>
                 </div>
-
               </div>
             ))}
           </div>
@@ -240,16 +278,19 @@ export const TabContratos: React.FC<TabContratosProps> = ({
               <span>Vinculação de Contratos às Unidades</span>
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {unidades.map(u => (
-                <div key={u.id} className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between text-xs gap-2">
+              {unidades.map((u) => (
+                <div
+                  key={u.id}
+                  className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between text-xs gap-2"
+                >
                   <div className="min-w-0">
                     <span className="font-bold text-slate-900 dark:text-white block truncate">{u.nome}</span>
                     {u.aliases && u.aliases.length > 0 && (
-                      <span className="text-xs text-purple-400 font-mono">
-                        Aliases: {u.aliases.map(a => a.alias).join(', ')}
+                      <span className="text-xs text-purple-400 font-mono block truncate">
+                        Aliases: {u.aliases.map((a) => a.alias).join(', ')}
                       </span>
                     )}
-                    <span className="text-xs text-slate-500 block truncate">
+                    <span className="text-[11px] text-slate-500 block truncate">
                       {u.impressoras || 0} impressoras · {u.leituras || 0} leituras
                     </span>
                   </div>
@@ -260,14 +301,16 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                       className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 rounded text-xs outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
                     >
                       <option value="">Sem Contrato</option>
-                      {contratos.map(c => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      {contratos.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome}
+                        </option>
                       ))}
                     </select>
                     <button
                       onClick={() => openDeleteModal(u)}
                       title={`Excluir unidade ${u.nome}`}
-                      className="p-1.5 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950 text-slate-500 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 border border-slate-300 dark:border-slate-600 rounded-lg transition-all cursor-pointer"
+                      className="p-1.5 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950 text-slate-500 hover:text-red-600 dark:hover:text-red-400 border border-slate-300 dark:border-slate-600 rounded-lg transition-all cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -276,7 +319,6 @@ export const TabContratos: React.FC<TabContratosProps> = ({
               ))}
             </div>
           </div>
-
         </div>
 
         {/* Contract Form (1 col) */}
@@ -284,7 +326,10 @@ export const TabContratos: React.FC<TabContratosProps> = ({
           <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center justify-between">
             <span>{editingId ? 'Editar Perfil' : 'Novo Perfil de Franquia'}</span>
             {editingId && (
-              <button onClick={resetForm} className="text-xs text-slate-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white underline">
+              <button
+                onClick={resetForm}
+                className="text-xs text-slate-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white underline"
+              >
                 Cancelar
               </button>
             )}
@@ -308,7 +353,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 <label className="text-slate-600 dark:text-slate-300 block mb-1">Tarifa P&B (R$/pág):</label>
                 <input
                   type="number"
-                  step="0.001"
+                  step="0.0001"
                   value={formTarifaPB}
                   onChange={(e) => setFormTarifaPB(Number(e.target.value))}
                   className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg font-mono outline-none"
@@ -318,7 +363,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 <label className="text-slate-600 dark:text-slate-300 block mb-1">Tarifa Color (R$/pág):</label>
                 <input
                   type="number"
-                  step="0.001"
+                  step="0.0001"
                   value={formTarifaColor}
                   onChange={(e) => setFormTarifaColor(Number(e.target.value))}
                   className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg font-mono outline-none"
@@ -345,7 +390,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                   <label className="text-slate-600 dark:text-slate-300 block mb-1">Valor Fixo Mensal (R$):</label>
                   <input
                     type="number"
-                    step="1"
+                    step="0.01"
                     value={formValorFixo}
                     onChange={(e) => setFormValorFixo(Number(e.target.value))}
                     className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-emerald-600 dark:text-emerald-400 font-bold rounded-lg font-mono outline-none"
@@ -376,7 +421,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                     <label className="text-slate-600 dark:text-slate-300 block mb-1">Excedente P&B (R$):</label>
                     <input
                       type="number"
-                      step="0.001"
+                      step="0.0001"
                       value={formExcedentePB}
                       onChange={(e) => setFormExcedentePB(Number(e.target.value))}
                       className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg font-mono outline-none"
@@ -386,7 +431,7 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                     <label className="text-slate-600 dark:text-slate-300 block mb-1">Excedente Color (R$):</label>
                     <input
                       type="number"
-                      step="0.001"
+                      step="0.0001"
                       value={formExcedenteColor}
                       onChange={(e) => setFormExcedenteColor(Number(e.target.value))}
                       className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg font-mono outline-none"
@@ -409,13 +454,13 @@ export const TabContratos: React.FC<TabContratosProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-all cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg transition-all cursor-pointer"
             >
-              {editingId ? 'Salvar Alterações' : 'Cadastrar Perfil de Franquia'}
+              {isSubmitting ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Cadastrar Perfil de Franquia'}
             </button>
           </form>
         </div>
-
       </div>
 
       {/* MERGE TOOL MODAL */}
@@ -442,10 +487,10 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 <select
                   value={origemId}
                   onChange={(e) => setOrigemId(e.target.value)}
-                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl outline-none"
+                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl outline-none cursor-pointer"
                 >
                   <option value="">Selecione a unidade origem...</option>
-                  {unidades.map(u => (
+                  {unidades.map((u) => (
                     <option key={u.id} value={u.id}>{u.nome}</option>
                   ))}
                 </select>
@@ -456,10 +501,10 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 <select
                   value={destinoId}
                   onChange={(e) => setDestinoId(e.target.value)}
-                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl outline-none"
+                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl outline-none cursor-pointer"
                 >
                   <option value="">Selecione a unidade destino...</option>
-                  {unidades.filter(u => u.id !== origemId).map(u => (
+                  {unidades.filter((u) => u.id !== origemId).map((u) => (
                     <option key={u.id} value={u.id}>{u.nome}</option>
                   ))}
                 </select>
@@ -467,7 +512,13 @@ export const TabContratos: React.FC<TabContratosProps> = ({
             </div>
 
             {mergeMessage && (
-              <div className={`p-3 rounded-xl text-xs font-semibold ${mergeMessage.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300'}`}>
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold ${
+                  mergeMessage.type === 'success'
+                    ? 'bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-red-100 dark:bg-red-950 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300'
+                }`}
+              >
                 {mergeMessage.text}
               </div>
             )}
@@ -486,7 +537,6 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 Executar Fusão de Unidades
               </button>
             </div>
-
           </div>
         </div>
       )}
@@ -524,7 +574,13 @@ export const TabContratos: React.FC<TabContratosProps> = ({
             />
 
             {deleteMessage && (
-              <div className={`p-3 rounded-xl text-xs font-semibold ${deleteMessage.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-950 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300'}`}>
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold ${
+                  deleteMessage.type === 'success'
+                    ? 'bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-red-100 dark:bg-red-950 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300'
+                }`}
+              >
                 {deleteMessage.text}
               </div>
             )}
@@ -544,7 +600,6 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 {isDeleting ? 'Excluindo...' : 'Excluir Definitivamente'}
               </button>
             </div>
-
           </div>
         </div>
       )}
@@ -558,15 +613,15 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 <AlertTriangle className="w-7 h-7 animate-bounce" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Validação de Segurança de Tarifa</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Validação de Segurança Tarifária</h3>
                 <span className="text-xs text-amber-600 dark:text-amber-300 font-semibold">Alerta de Valor Elevado</span>
               </div>
             </div>
 
             <div className="p-4 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 rounded-xl text-xs text-amber-900 dark:text-amber-100 leading-relaxed font-medium">
-              Você digitou uma tarifa unitária <strong>superior a R$ 1,50 por página</strong>.
+              Você digitou uma tarifa unitária <strong>superior a R$ 1,50 por página</strong>:
               <div className="mt-2 p-2 bg-slate-100 dark:bg-slate-900 rounded font-mono text-amber-600 dark:text-amber-300">
-                Valor informado: R$ {pendingContratoForm.tarifaAvulsaPB || pendingContratoForm.tarifaAvulsaColor} /pág
+                {safetyReason}
               </div>
               <p className="mt-2">
                 Confirme se este valor está correto ou se houve um erro de digitação (ex.: digitou R$ 4,00 em vez de R$ 0,04).
@@ -584,13 +639,12 @@ export const TabContratos: React.FC<TabContratosProps> = ({
                 onClick={confirmSafetySave}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-extrabold rounded-xl text-xs shadow-lg cursor-pointer"
               >
-                Confirmar R$ {pendingContratoForm.tarifaAvulsaPB || pendingContratoForm.tarifaAvulsaColor}
+                Confirmar Valor Elevado
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };

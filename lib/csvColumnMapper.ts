@@ -38,50 +38,59 @@ export function detectColumnMapping(
     lower: h.toLowerCase().replace(/[^a-z0-9_]/g, ''),
   }));
 
-  // Mapeamento de campos fixos (IP, Serial, Modelo, Data, Status)
   const mapping: ColumnMapping = {
     ip: findColumn(normalized, ['ip', 'enderecoip', 'endereco_ip', 'networkip']) || '',
     serial: findColumn(normalized, ['serial', 'sn', 'numerodeserie', 'numero_serie', 'serie']) || '',
     modelo: findColumn(normalized, ['modelo', 'model', 'device', 'equipamento', 'printer']) || '',
-    dataHora: findColumn(normalized, ['data', 'datahora', 'data_hora', 'datetime', 'date', 'timestamp', 'horario']) || '',
+    dataHora:
+      findColumn(normalized, [
+        'data',
+        'datahora',
+        'data_hora',
+        'datetime',
+        'date',
+        'timestamp',
+        'horario',
+      ]) || '',
     paginasTotal: '',
     paginasPB: '',
     paginasColor: '',
     status: findColumn(normalized, ['status', 'estado', 'situacao', 'state']) || '',
   };
 
-  // Colunas numéricas candidatas a Total/PB/Color
+  // Exclui exatamente as colunas já mapeadas como metadados textuais
+  const excludedOriginals = new Set(
+    [mapping.ip, mapping.serial, mapping.modelo, mapping.dataHora, mapping.status].filter(Boolean)
+  );
+
   const numericCandidates = normalized.filter((h) => {
-    if (mapping.ip.includes(h.lower) || mapping.serial.includes(h.lower) ||
-        mapping.modelo.includes(h.lower) || mapping.dataHora.includes(h.lower) ||
-        mapping.status.includes(h.lower)) {
+    if (excludedOriginals.has(h.original)) {
       return false;
     }
-    // Verifica se tem algum valor numérico nas rows de exemplo
     return sampleRows.some((row) => {
       const v = row[h.original];
-      return v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+      return v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
     });
   });
 
   if (numericCandidates.length === 0) {
-    // Fallback: tenta nomes genéricos
-    mapping.paginasTotal = findColumn(normalized, ['paginas_total', 'total', 'pagtotal']) || 'Paginas_Total';
-    mapping.paginasPB = findColumn(normalized, ['paginas_pb', 'pb', 'preto', 'bw', 'p&b', 'pagpb']) || 'Paginas_PB';
-    mapping.paginasColor = findColumn(normalized, ['paginas_color', 'color', 'cor', 'colour', 'pagcolor']) || 'Paginas_Color';
+    mapping.paginasTotal =
+      findColumn(normalized, ['paginas_total', 'total', 'pagtotal']) || 'Paginas_Total';
+    mapping.paginasPB =
+      findColumn(normalized, ['paginas_pb', 'pb', 'preto', 'bw', 'p&b', 'pagpb']) || 'Paginas_PB';
+    mapping.paginasColor =
+      findColumn(normalized, ['paginas_color', 'color', 'cor', 'colour', 'pagcolor']) ||
+      'Paginas_Color';
     return mapping;
   }
 
-  // Calcula estatísticas por coluna numérica
   const stats = numericCandidates.map((h) => computeColumnStats(h.original, sampleRows));
 
-  // Se temos 3+ colunas numéricas, usa heurísticas avançadas
   if (stats.length >= 3) {
     assignThreeColumns(stats, mapping);
   } else if (stats.length === 2) {
     assignTwoColumns(stats, mapping);
   } else if (stats.length === 1) {
-    // Só 1 coluna numérica → assume que é Total, PB e Color ficam 0
     mapping.paginasTotal = stats[0].name;
     mapping.paginasPB = '';
     mapping.paginasColor = '';
@@ -90,23 +99,15 @@ export function detectColumnMapping(
   return mapping;
 }
 
-/**
- * Mapeamento para 3 colunas numéricas: Total, PB, Color.
- */
 function assignThreeColumns(stats: ColumnStats[], mapping: ColumnMapping): void {
-  // Ordena por média decrescente (maior = provável Total)
   const sorted = [...stats].sort((a, b) => b.avg - a.avg);
 
-  // Tenta匹配 por nome primeiro
   const byName = matchByName(stats, mapping);
   if (byName) return;
 
-  // Heurística: maior valor = Total
-  // Dos dois menores: o com mais zeros = PB (impressoras coloridas têm pouco PB)
   mapping.paginasTotal = sorted[0].name;
 
   const smaller = sorted.slice(1);
-  // Se um tem muitos zeros e o outro não → o com zeros é PB
   if (smaller[0].zeroCount > smaller[1].zeroCount) {
     mapping.paginasPB = smaller[0].name;
     mapping.paginasColor = smaller[1].name;
@@ -114,33 +115,23 @@ function assignThreeColumns(stats: ColumnStats[], mapping: ColumnMapping): void 
     mapping.paginasPB = smaller[1].name;
     mapping.paginasColor = smaller[0].name;
   } else {
-    // Empate: assume que menor média = PB (geralmente menos PB que Color)
     mapping.paginasPB = smaller[1].name;
     mapping.paginasColor = smaller[0].name;
   }
 
-  // Validação: PB + Color não deve ser >> Total
   validateMapping(stats, mapping);
 }
 
-/**
- * Mapeamento para 2 colunas numéricas.
- */
 function assignTwoColumns(stats: ColumnStats[], mapping: ColumnMapping): void {
   const byName = matchByName(stats, mapping);
   if (byName) return;
 
-  // Com 2 colunas, provavelmente é Total e (PB ou Color combinado)
   const sorted = [...stats].sort((a, b) => b.avg - a.avg);
   mapping.paginasTotal = sorted[0].name;
-  // A segunda coluna pode ser PB ou Color; sem mais info, assume Color
   mapping.paginasColor = sorted[1].name;
   mapping.paginasPB = '';
 }
 
-/**
- * Tenta mapear por nomes de coluna conhecidos.
- */
 function matchByName(stats: ColumnStats[], mapping: ColumnMapping): boolean {
   const totalPatterns = ['paginas_total', 'total', 'pagtotal', 'totalpages', 'total_pages'];
   const pbPatterns = ['paginas_pb', 'pb', 'preto', 'bw', 'p&b', 'pagpb', 'black', 'mono'];
@@ -167,9 +158,6 @@ function matchByName(stats: ColumnStats[], mapping: ColumnMapping): boolean {
   return foundTotal || foundPB || foundColor;
 }
 
-/**
- * Valida se o mapeamento faz sentido (PB + Color <= Total aproximadamente).
- */
 function validateMapping(stats: ColumnStats[], mapping: ColumnMapping): void {
   const totalS = stats.find((s) => s.name === mapping.paginasTotal);
   const pbS = stats.find((s) => s.name === mapping.paginasPB);
@@ -177,19 +165,14 @@ function validateMapping(stats: ColumnStats[], mapping: ColumnMapping): void {
 
   if (!totalS || !pbS || !colorS) return;
 
-  // Se PB + Color > Total em todas as amostras, o mapeamento pode estar errado
-  const allRowsInvalid = totalS.max > 0 &&
-    pbS.avg + colorS.avg > totalS.avg * 1.1; // 10% de margem
+  const allRowsInvalid = totalS.max > 0 && pbS.avg + colorS.avg > totalS.avg * 1.1;
 
   if (allRowsInvalid) {
-    // Tenta trocar PB <-> Total: se PB é maior que Total, provavelmente PB é o Total real
     if (pbS.avg > totalS.avg && pbS.avg >= colorS.avg) {
       const tmpName = mapping.paginasTotal;
       mapping.paginasTotal = mapping.paginasPB;
       mapping.paginasPB = tmpName;
-    }
-    // Ou tenta trocar Color <-> Total
-    else if (colorS.avg > totalS.avg && colorS.avg >= pbS.avg) {
+    } else if (colorS.avg > totalS.avg && colorS.avg >= pbS.avg) {
       const tmpName = mapping.paginasTotal;
       mapping.paginasTotal = mapping.paginasColor;
       mapping.paginasColor = tmpName;
@@ -197,9 +180,12 @@ function validateMapping(stats: ColumnStats[], mapping: ColumnMapping): void {
   }
 }
 
-function findColumn(normalized: { original: string; lower: string }[], patterns: string[]): string | null {
+function findColumn(
+  normalized: { original: string; lower: string }[],
+  patterns: string[]
+): string | null {
   for (const n of normalized) {
-    if (patterns.some((p) => n.lower.includes(p))) {
+    if (patterns.some((p) => n.lower === p || n.lower.includes(p))) {
       return n.original;
     }
   }
@@ -213,7 +199,7 @@ function computeColumnStats(colName: string, rows: Record<string, unknown>[]): C
   for (const row of rows) {
     const raw = row[colName];
     const num = Number(raw);
-    if (!isNaN(num)) {
+    if (!Number.isNaN(num)) {
       values.push(num);
       if (num === 0) zeroCount++;
     }
@@ -234,24 +220,16 @@ function computeColumnStats(colName: string, rows: Record<string, unknown>[]): C
   };
 }
 
-/**
- * Detecta automaticamente o separador do CSV (ponto e vírgula, vírgula ou tab).
- * Retorna o caractere real do separador (ex: '\t' é UM caractere ASCII 9).
- */
 export function detectCsvSeparator(content: string): string {
   const firstLine = content.split('\n')[0] || '';
   const semicolons = (firstLine.match(/;/g) || []).length;
   const commas = (firstLine.match(/,/g) || []).length;
   const tabs = (firstLine.match(/\t/g) || []).length;
-  // Maioria vence; empate: ; > , > \t
   if (semicolons >= commas && semicolons >= tabs) return ';';
   if (commas >= semicolons && commas >= tabs) return ',';
-  return '\t'; // caractere tab REAL (ASCII 9), não a string "\\t"
+  return '\t';
 }
 
-/**
- * Loga o mapeamento detectado para debugging.
- */
 export function logMapping(mapping: ColumnMapping, fileName: string): void {
   console.log(`[CSV Mapper] Arquivo: ${fileName}`);
   console.log(`[CSV Mapper] IP: ${mapping.ip}`);

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
 import { prisma } from '@/lib/prisma';
 import { getConfiguracaoIA, iaConfigurado } from '@/lib/aiConfig';
 import { chamarIA } from '@/lib/aiProviders';
+import { isAuthenticated } from '@/lib/auth';
+import { checkRateLimit, getClientIdentifier } from '@/lib/rateLimit';
 import {
   getDashboardKPIs,
   getImpressorasView,
@@ -12,11 +13,14 @@ import {
   getContagemDiariaComDias,
 } from '@/lib/business';
 
-// Monta contexto com todos os dados do painel
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 async function buildContext() {
-  const [kpis, impressoras, ranking, timeline, projecoes, contagemComDias, slaConfig] = await Promise.all([
+  // Pré-aquece o cache deduplicado de getImpressorasView antes do Promise.all
+  const impressoras = await getImpressorasView(prisma);
+  const [kpis, ranking, timeline, projecoes, contagemComDias, slaConfig] = await Promise.all([
     getDashboardKPIs(prisma),
-    getImpressorasView(prisma),
     getBranchRanking(prisma),
     getTimelineData(prisma),
     getFinancialProjections(prisma),
@@ -111,11 +115,26 @@ Alertas ativos: ${context.slaAtivo ? 'sim' : 'não'}
 Pendentes: ${context.unidadesPendentesSLA.length} unidade(s)`;
 }
 
-export async function POST() {
+export async function POST(req: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ error: 'Não autorizado. Faça login.' }, { status: 401 });
+  }
+
+  const rate = checkRateLimit(getClientIdentifier(req, 'ia_analise'), 10, 5 * 60 * 1000);
+  if (!rate.success) {
+    return NextResponse.json(
+      { error: 'Muitas solicitações de análise de IA em sequência. Aguarde alguns instantes.' },
+      { status: 429 }
+    );
+  }
+
   try {
     const config = await getConfiguracaoIA();
     if (!iaConfigurado(config)) {
-      return NextResponse.json({ error: 'IA não configurada ou sem API Key. Acesse a aba Configurações.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'IA não configurada ou sem API Key. Acesse a aba Configurações.' },
+        { status: 400 }
+      );
     }
     const context = await buildContext();
     const systemPrompt = buildSystemPrompt();
@@ -123,10 +142,16 @@ export async function POST() {
 
     const resposta = await chamarIA({ config, systemPrompt, userPrompt });
 
-    return NextResponse.json({ ...resposta, contexto: { unidades: context.contagemPorUnidade.length, impressoras: context.resumoImpressoras.length } });
+    return NextResponse.json({
+      ...resposta,
+      contexto: {
+        unidades: context.contagemPorUnidade.length,
+        impressoras: context.resumoImpressoras.length,
+      },
+    });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    fs.appendFileSync('log_ia.txt', new Date().toISOString() + ' - ERRO IA: ' + msg + '\n');
+    console.error('[IA ANALISE ERRO]', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
